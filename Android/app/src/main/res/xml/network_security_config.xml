@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Network security config: allow cleartext HTTP to LAN addresses only.
+  Dashboard only communicates over local network (no remote servers for pen data).
+  Google OAuth uses HTTPS — no exceptions needed for that.
+-->
+<network-security-config>
+    <!-- Local network: allow cleartext for UDP/TCP pen streaming (LAN only) -->
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Private IPv4 ranges (RFC 1918) -->
+        <domain includeSubdomains="true">10.0.0.0/8</domain>
+        <domain includeSubdomains="true">172.16.0.0/12</domain>
+        <domain includeSubdomains="true">192.168.0.0/16</domain>
+        <!-- Loopback (USB/adb reverse) -->
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">localhost</domain>
+    </domain-config>
+    <!-- All other traffic (Google APIs) must use TLS -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>

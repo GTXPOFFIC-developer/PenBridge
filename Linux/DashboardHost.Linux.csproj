@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AssemblyName>DashboardHost.Linux</AssemblyName>
+    <RootNamespace>DashboardHost.Linux</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Windows\Core\Protocol.cs" Link="Core\Protocol.cs" />
+    <Compile Include="..\Windows\Core\GoogleAuthService.cs" Link="Core\GoogleAuthService.cs" />
+    <Compile Include="..\Windows\Core\DeviceManager.cs" Link="Core\DeviceManager.cs" />
+    <Compile Include="..\Windows\Core\AdbHelper.cs" Link="Core\AdbHelper.cs" />
+  </ItemGroup>
+
+</Project>

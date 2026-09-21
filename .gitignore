@@ -1,0 +1,44 @@
+# Gradle & Android
+.gradle/
+build/
+**/build/
+*.apk
+*.aab
+local.properties
+.cxx/
+capture/
+*.hprof
+
+# IDE & Editor
+.idea/
+**/.idea/
+*.iml
+**/*.iml
+.vscode/
+*.swp
+*~
+
+# .NET & Visual Studio
+bin/
+**/bin/
+obj/
+**/obj/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+.vs/
+**/[Dd]ebug/
+**/[Rr]elease/
+*.publishproj
+
+# OS Generated
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Dashboard specific build outputs
+builds/
+InstalledHost/
+scratch/

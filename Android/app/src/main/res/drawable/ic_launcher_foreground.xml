@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Pen nib centered on the 108x108 adaptive icon canvas -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,22 L75,70 C75,78 66,84 54,88 C42,84 33,78 33,70 Z" />
+    <path
+        android:fillColor="#8B5CF6"
+        android:pathData="M54,22 L62,62 C58,66 50,66 46,62 Z" />
+</vector>

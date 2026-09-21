@@ -1,0 +1,24 @@
+; ============================================================
+; Dashboard Linux Host — Linux Installer Script (inno alternative)
+; This is the companion to the macOS build-pkg.sh.
+; For Linux: use install.sh in the Linux directory.
+; ============================================================
+; NOTE: This file documents how to create a DEB/RPM from the
+; Linux publish output if preferred over install.sh.
+;
+; DEB package:
+;   fpm -s dir -t deb -n dashboard-host -v 1.0.0 \
+;     --description "Android/iOS Tablet Pen Bridge" \
+;     --after-install Linux/install.sh \
+;     Linux/publish/=/opt/dashboard-host
+;
+; RPM package:
+;   fpm -s dir -t rpm -n dashboard-host -v 1.0.0 \
+;     --after-install Linux/install.sh \
+;     Linux/publish/=/opt/dashboard-host
+;
+; AppImage (using linuxdeploy):
+;   linuxdeploy --appdir AppDir \
+;     --executable Linux/publish/DashboardHost.Linux \
+;     --output appimage
+; ============================================================
