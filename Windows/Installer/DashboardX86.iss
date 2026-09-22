@@ -61,3 +61,132 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Dashboard Host Data x86 (UDP 41174)"""; Flags: runhidden; RunOnceId: "FwData86"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Dashboard Host USB x86 (TCP 41174)"""; Flags: runhidden; RunOnceId: "FwUsb86"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Dashboard mDNS x86 (UDP 5353)"""; Flags: runhidden; RunOnceId: "FwMdns86"
+
+[Code]
+var
+  DownloadPage: TDownloadWizardPage;
+
+function IsDotNetDesktop8Installed(): Boolean;
+var
+  FindRec: TFindRec;
+  DotNetPath: String;
+begin
+  Result := False;
+  // Check standard shared folder for Microsoft.WindowsDesktop.App 8.x
+  DotNetPath := ExpandConstant('{pf}\dotnet\shared\Microsoft.WindowsDesktop.App');
+  if DirExists(DotNetPath) then
+  begin
+    if FindFirst(DotNetPath + '\8.*', FindRec) then
+    begin
+      try
+        Result := True;
+      finally
+        FindClose(FindRec);
+      end;
+    end;
+  end;
+
+  if not Result then
+  begin
+    DotNetPath := ExpandConstant('{pf32}\dotnet\shared\Microsoft.WindowsDesktop.App');
+    if DirExists(DotNetPath) then
+    begin
+      if FindFirst(DotNetPath + '\8.*', FindRec) then
+      begin
+        try
+          Result := True;
+        finally
+          FindClose(FindRec);
+        end;
+      end;
+    end;
+  end;
+
+  if not Result then
+  begin
+    if FileExists(ExpandConstant('{pf}\dotnet\dotnet.exe')) or FileExists(ExpandConstant('{pf32}\dotnet\dotnet.exe')) then
+      Result := True;
+  end;
+end;
+
+function IsVCRedistInstalled(): Boolean;
+var
+  Installed: Cardinal;
+begin
+  Result := False;
+  if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X86', 'Installed', Installed) then
+  begin
+    Result := (Installed = 1);
+  end;
+end;
+
+function OnDownloadProgress(const Url, FileName: String; const Progress, ProgressMax: Int64): Boolean;
+begin
+  if ProgressMax <> 0 then
+    Log(Format('  %d of %d bytes done.', [Progress, ProgressMax]))
+  else
+    Log(Format('  %d bytes done.', [Progress]));
+  Result := True;
+end;
+
+procedure InitializeWizard;
+begin
+  DownloadPage := CreateDownloadPage(SetupMessage(msgWizardPreparing), SetupMessage(msgPreparingDesc), @OnDownloadProgress);
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  ResultCode: Integer;
+  NeedsDotNet: Boolean;
+  NeedsVCRedist: Boolean;
+  DownloadNeeded: Boolean;
+begin
+  Result := True;
+  if CurPageID = wpReady then
+  begin
+    NeedsDotNet := not IsDotNetDesktop8Installed();
+    NeedsVCRedist := not IsVCRedistInstalled();
+    DownloadNeeded := False;
+
+    DownloadPage.Clear;
+    if NeedsDotNet then
+    begin
+      DownloadPage.Add('https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x86.exe', 'dotnet-desktop-runtime-win-x86.exe', '');
+      DownloadNeeded := True;
+    end;
+    if NeedsVCRedist then
+    begin
+      DownloadPage.Add('https://aka.ms/vs/17/release/vc_redist.x86.exe', 'vc_redist.x86.exe', '');
+      DownloadNeeded := True;
+    end;
+
+    if DownloadNeeded then
+    begin
+      DownloadPage.Show;
+      try
+        try
+          DownloadPage.Download;
+          Result := True;
+        except
+          if DownloadPage.AbortedByUser then
+            Log('Download aborted by user.')
+          else
+            SuppressibleMsgBox('Failed to download prerequisite tools: ' + GetExceptionMessage + #13#10#13#10 + 'Setup will continue, but some components may require manual installation.', mbInformation, MB_OK, IDOK);
+          Result := True;
+        end;
+      finally
+        DownloadPage.Hide;
+      end;
+
+      if NeedsDotNet and FileExists(ExpandConstant('{tmp}\dotnet-desktop-runtime-win-x86.exe')) then
+      begin
+        Exec(ExpandConstant('{tmp}\dotnet-desktop-runtime-win-x86.exe'), '/install /quiet /norestart', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
+      end;
+
+      if NeedsVCRedist and FileExists(ExpandConstant('{tmp}\vc_redist.x86.exe')) then
+      begin
+        Exec(ExpandConstant('{tmp}\vc_redist.x86.exe'), '/install /quiet /norestart', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
+      end;
+    end;
+  end;
+end;
