@@ -108,6 +108,15 @@ class ConnectionManager(
     // mDNS discovery (Wi-Fi mode only)
     private var mdns: MdnsDiscovery? = null
 
+    /**
+     * The IP the user explicitly typed in the manual-IP field.
+     * While non-blank, mDNS / UDP-beacon auto-connect is suppressed so
+     * that discovered hosts appear in the list but do NOT override the
+     * connection attempt the user initiated.
+     */
+    @Volatile
+    private var manualIp: String = ""
+
     private val activeHost = MutableStateFlow<HostInfo?>(null)
     private var seq = 1
     private var authAttempted = false
@@ -125,7 +134,7 @@ class ConnectionManager(
 
     // ─────────────────────────────────────────── lifecycle ───────────────────
 
-    fun start(mode: ConnectMode, manualIp: String = "") {
+    fun start(mode: ConnectMode, ip: String = "") {
         if (running.getAndSet(true)) return
         // BUG-FIX: stop transports synchronously so state is clean before we start
         stopTransportsSync()
@@ -133,8 +142,9 @@ class ConnectionManager(
         _lastError.value = null
         seq = 1
         authAttempted = false
+        manualIp = ip.trim()
         when (mode) {
-            ConnectMode.WIFI -> startWifiTransport(manualIp)
+            ConnectMode.WIFI -> startWifiTransport(ip.trim())
             ConnectMode.USB  -> startUsbTransport()
         }
     }
@@ -222,7 +232,11 @@ class ConnectionManager(
             context = appContext,
             onHostFound = { host ->
                 _hosts.value = mergeHost(_hosts.value, host)
-                if (_state.value is ConnState.Discovering || _state.value is ConnState.Disconnected) {
+                // Only auto-connect when the user has NOT typed a manual IP.
+                // If a manual IP is set we still add the host to the list so
+                // the user can tap it, but we don't override their explicit choice.
+                if (manualIp.isBlank() &&
+                    (_state.value is ConnState.Discovering || _state.value is ConnState.Disconnected)) {
                     connectTo(host)
                 }
             }
@@ -306,8 +320,11 @@ class ConnectionManager(
         val name = String(buf, 1, nameLen, Charsets.US_ASCII)
         val host = HostInfo(from, name, port)
         _hosts.value = mergeHost(_hosts.value, host)
-        // Auto-connect immediately if we are discovering and see a host
-        if (_state.value is ConnState.Discovering || _state.value is ConnState.Disconnected) {
+        // Auto-connect only when the user has NOT typed a manual IP.
+        // When manualIp is set we still add the host to the discovered list,
+        // but we do NOT override the explicit connection the user initiated.
+        if (manualIp.isBlank() &&
+            (_state.value is ConnState.Discovering || _state.value is ConnState.Disconnected)) {
             connectTo(host)
         }
     }
@@ -501,6 +518,9 @@ class ConnectionManager(
 
     /** User picked a host from the discovery list (Wi-Fi). */
     fun connectTo(host: HostInfo) {
+        // User explicitly chose a host — clear any manual IP lock so future
+        // mDNS / beacon discoveries can auto-connect after disconnects.
+        manualIp = ""
         activeHost.value = host
         if (host.ip != "usb") {
             try { cachedTargetAddr = java.net.InetAddress.getByName(host.ip) } catch (_: Exception) {}

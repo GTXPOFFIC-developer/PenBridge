@@ -19,6 +19,8 @@ DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\bin\Installer
 OutputBaseFilename=DashboardX64
+SetupIconFile=..\app.ico
+UninstallDisplayIcon={app}\DashboardHost.exe
 Compression=lzma2/max
 SolidCompression=yes
 ; Require 64-bit Windows — installer will refuse on 32-bit systems

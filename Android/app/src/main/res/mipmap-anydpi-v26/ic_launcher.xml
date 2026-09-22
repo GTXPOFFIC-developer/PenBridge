@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Adaptive icon: the Dashboard icon already has its own dark rounded background,
+    so we use it as a full-bleed foreground with a transparent background layer.
+    This keeps the icon looking correct on all launcher shapes (circle, squircle, etc.)
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background" />
-    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <background android:drawable="@android:color/transparent" />
+    <foreground android:drawable="@drawable/ic_launcher" />
 </adaptive-icon>

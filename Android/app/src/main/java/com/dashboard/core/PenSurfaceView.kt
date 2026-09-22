@@ -155,18 +155,23 @@ class PenSurfaceView(
             MotionEvent.ACTION_UP -> {
                 val elapsed = System.currentTimeMillis() - downTime
                 if (!pointerMoved && elapsed < 300) {
-                    // Tap = Left Click!
-                    val p = PenEvent.pool
-                    p.action = Const.ACTION_DOWN
-                    p.relative = true
-                    p.contact = true
-                    p.xNorm = 0
-                    p.yNorm = 0
-                    onSample(p)
+                    // Tap = Left Click — use separate PenEvent instances to avoid
+                    // mutation corruption when onSample is called back-to-back.
+                    val down = PenEvent()
+                    down.action = Const.ACTION_DOWN
+                    down.relative = true
+                    down.contact = true
+                    down.xNorm = 0
+                    down.yNorm = 0
+                    onSample(down)
 
-                    p.action = Const.ACTION_UP
-                    p.contact = false
-                    onSample(p)
+                    val up = PenEvent()
+                    up.action = Const.ACTION_UP
+                    up.relative = true
+                    up.contact = false
+                    up.xNorm = 0
+                    up.yNorm = 0
+                    onSample(up)
 
                     if (hapticsEnabled) onHaptic?.invoke()
                 }
@@ -176,32 +181,58 @@ class PenSurfaceView(
                 subpixelX = 0f
                 subpixelY = 0f
                 twoFingerScroll = false
+                pointerMoved = false
             }
             MotionEvent.ACTION_POINTER_UP -> {
                 if (twoFingerScroll) {
                     val elapsed = System.currentTimeMillis() - downTime
                     if (!pointerMoved && elapsed < 350) {
-                        // Two-finger tap = Right Click!
-                        val p = PenEvent.pool
-                        p.action = Const.ACTION_DOWN
-                        p.barrel = true
-                        p.relative = true
-                        p.xNorm = 0
-                        p.yNorm = 0
-                        onSample(p)
+                        // Two-finger tap = Right Click.
+                        // BUG-FIX: must send both DOWN and UP; missing UP left the right
+                        // mouse button held indefinitely, causing erratic selection behaviour.
+                        val down = PenEvent()
+                        down.action = Const.ACTION_DOWN
+                        down.barrel = true
+                        down.relative = true
+                        down.xNorm = 0
+                        down.yNorm = 0
+                        onSample(down)
+
+                        val up = PenEvent()
+                        up.action = Const.ACTION_UP
+                        up.barrel = true
+                        up.relative = true
+                        up.xNorm = 0
+                        up.yNorm = 0
+                        onSample(up)
+
                         if (hapticsEnabled) onHaptic?.invoke()
                     }
                     twoFingerScroll = false
-                    lastTouchX = -1f
-                    lastTouchY = -1f
+                    lastTwoFingerY = -1f
+                    // Resume single-finger tracking from the remaining finger so the
+                    // cursor doesn't jump on the next MOVE event.
+                    val remaining = if (event.actionIndex == 0) 1 else 0
+                    if (event.pointerCount > remaining) {
+                        lastTouchX = event.getX(remaining)
+                        lastTouchY = event.getY(remaining)
+                    } else {
+                        lastTouchX = -1f
+                        lastTouchY = -1f
+                    }
                     subpixelX = 0f
                     subpixelY = 0f
+                    // Prevent the imminent ACTION_UP from registering as a tap.
+                    pointerMoved = true
                 }
             }
             MotionEvent.ACTION_CANCEL -> {
                 lastTouchX = -1f
                 lastTouchY = -1f
+                subpixelX = 0f
+                subpixelY = 0f
                 twoFingerScroll = false
+                pointerMoved = false
             }
         }
     }
