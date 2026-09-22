@@ -41,7 +41,7 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Dashboard Host" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
                         <Border Background="#252A4A" CornerRadius="4" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="v1.0" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentViolet}"/>
+                            <TextBlock Text="v1.1.0" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentViolet}"/>
                         </Border>
                     </StackPanel>
                     <TextBlock Text="Android / iOS Tablet → Windows Pen Bridge" FontSize="11" Foreground="{StaticResource TextMuted}"/>
@@ -50,6 +50,7 @@
 
             <!-- Right header actions -->
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                <Button x:Name="CheckUpdateBtn" Content="⟳ Update" Style="{StaticResource SecondaryButtonStyle}" Click="CheckUpdateBtn_Click" Padding="10,5" Margin="0,0,10,0" WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="Check for latest updates and auto-update without installer"/>
                 <Border x:Name="ServerStatusBadge" Background="#16382C" BorderBrush="{StaticResource StatusGreen}" BorderThickness="1" CornerRadius="14" Padding="10,5" Margin="0,0,10,0">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Ellipse x:Name="StatusLed" Width="7" Height="7" Fill="{StaticResource StatusGreen}" Margin="0,0,7,0"/>

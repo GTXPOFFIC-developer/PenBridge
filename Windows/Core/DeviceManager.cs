@@ -106,12 +106,15 @@ namespace DashboardHost.Core
             }
         }
 
+        public event Action<string>? DeviceRevoked;
+
         public void RevokeDevice(string deviceId)
         {
             if (_allowedDevices.TryRemove(deviceId, out _))
             {
                 SaveAllowedDevices();
                 DevicesChanged?.Invoke();
+                DeviceRevoked?.Invoke(deviceId);
             }
         }
 

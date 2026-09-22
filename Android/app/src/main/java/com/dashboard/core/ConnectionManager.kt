@@ -13,6 +13,7 @@ import com.dashboard.core.Const.TYPE_GOOGLE_AUTH
 import com.dashboard.core.Const.TYPE_HELLO_ACK
 import com.dashboard.core.Const.TYPE_PAIR_RESULT
 import com.dashboard.core.Const.TYPE_PONG
+import com.dashboard.core.Const.TYPE_BYE
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -300,6 +301,7 @@ class ConnectionManager(
                     TYPE_PAIR_RESULT -> handlePairResult(frame, from)
                     TYPE_PONG       -> handlePong(frame)
                     TYPE_CONFIG     -> handleConfig(frame)
+                    TYPE_BYE        -> handleBye(from)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -338,6 +340,13 @@ class ConnectionManager(
             .putString("last_host_ip", ip)
             .putString("last_host_name", name)
             .apply()
+    }
+
+    private fun handleBye(from: String) {
+        if (activeHost.value?.ip == from || activeHost.value?.ip == "usb") {
+            _state.value = ConnState.Disconnected
+            activeHost.value = null
+        }
     }
 
     private fun handleHelloAck(f: Frame, from: String) {
@@ -438,6 +447,11 @@ class ConnectionManager(
                         }
                         TYPE_PONG   -> handlePong(frame)
                         TYPE_CONFIG -> handleConfig(frame)
+                        TYPE_BYE    -> {
+                            _state.value = ConnState.Disconnected
+                            activeHost.value = null
+                            break
+                        }
                     }
                 }
             } catch (e: CancellationException) {

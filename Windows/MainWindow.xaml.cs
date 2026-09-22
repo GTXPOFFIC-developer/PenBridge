@@ -20,6 +20,7 @@ namespace DashboardHost
         private System.Windows.Forms.NotifyIcon? _notifyIcon;
         private bool _isExplicitExit = false;
         private readonly NetworkServer _server;
+        private readonly UpdateService _updateService;
 
         public MainWindow()
         {
@@ -30,6 +31,7 @@ namespace DashboardHost
             _inputInjector = new InputInjector();
             _settingsStore = new SettingsStore();
             _server = new NetworkServer(_deviceManager, _googleAuth, _inputInjector);
+            _updateService = new UpdateService();
 
             InitializeState();
             WireEvents();
@@ -53,6 +55,27 @@ namespace DashboardHost
 
             SetupTrayIcon();
             RefreshDevicesList();
+
+            _updateService.LogMessage += msg => _server.Log(msg);
+            _updateService.UpdateChecked += (hasUpdate, version, url) =>
+            {
+                if (hasUpdate && !string.IsNullOrEmpty(url))
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        var res = MessageBox.Show(
+                            $"A new version (v{version}) is available!\nWould you like to auto-update now without running an installer?",
+                            "PenBridge Update Available",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Information);
+                        if (res == MessageBoxResult.Yes)
+                        {
+                            _ = _updateService.ApplyUpdateAsync(url);
+                        }
+                    });
+                }
+            };
+            Task.Run(() => _updateService.CheckForUpdatesAsync());
         }
 
         private void WireEvents()
@@ -360,6 +383,41 @@ namespace DashboardHost
         private void CloseBtn_Click(object sender, RoutedEventArgs e)
         {
             Close();
+        }
+
+        private async void CheckUpdateBtn_Click(object sender, RoutedEventArgs e)
+        {
+            CheckUpdateBtn.IsEnabled = false;
+            CheckUpdateBtn.Content = "Checking...";
+            try
+            {
+                var (hasUpdate, version, url) = await _updateService.CheckForUpdatesAsync();
+                if (hasUpdate && !string.IsNullOrEmpty(url))
+                {
+                    var res = MessageBox.Show(
+                        $"New version v{version} is available!\nUpdate now seamlessly without running an installer?",
+                        "Update Available",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Information);
+                    if (res == MessageBoxResult.Yes)
+                    {
+                        await _updateService.ApplyUpdateAsync(url);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show(
+                        $"You are running the latest version (v{UpdateService.CurrentVersion}).",
+                        "PenBridge Up to Date",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+            }
+            finally
+            {
+                CheckUpdateBtn.IsEnabled = true;
+                CheckUpdateBtn.Content = "⟳ Update";
+            }
         }
     }
 }

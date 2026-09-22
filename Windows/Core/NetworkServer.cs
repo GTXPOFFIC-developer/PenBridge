@@ -42,6 +42,34 @@ namespace DashboardHost.Core
             _deviceManager = deviceManager;
             _googleAuth = googleAuth;
             _inputInjector = inputInjector;
+            _deviceManager.DeviceRevoked += OnDeviceRevoked;
+        }
+
+        private void OnDeviceRevoked(string deviceId)
+        {
+            try
+            {
+                foreach (var kvp in _peerInfo)
+                {
+                    if (string.Equals(kvp.Value.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        string ipStr = kvp.Key;
+                        _peerInfo.TryRemove(ipStr, out _);
+
+                        if (IPAddress.TryParse(ipStr, out var ip))
+                        {
+                            byte[] bye = Wire.Bye(NextSeq());
+                            _dataClient?.Send(bye, bye.Length, new IPEndPoint(ip, ProtocolConst.DataPort));
+                            _discoveryClient?.Send(bye, bye.Length, new IPEndPoint(ip, ProtocolConst.DiscoveryPort));
+                        }
+                    }
+                }
+                LogMessage?.Invoke($"Device '{deviceId}' revoked. Sent BYE disconnect frame.");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"OnDeviceRevoked error: {ex.Message}");
+            }
         }
 
         public void Start()
@@ -253,7 +281,7 @@ namespace DashboardHost.Core
                 string deviceId = info.DeviceId ?? remoteIp;
                 string name = info.Name ?? "Android Tablet";
 
-                string authMethod = string.Equals(code, DeviceManager.MasterPassword, StringComparison.Ordinal) ? "Password" : "PIN";
+                string authMethod = (!string.IsNullOrEmpty(_deviceManager.ConfiguredPassword) && string.Equals(code, _deviceManager.ConfiguredPassword, StringComparison.Ordinal)) ? "Password" : "PIN";
                 _deviceManager.AuthorizeDevice(deviceId, name, remoteIp, authMethod);
                 byte[] ack = Wire.HelloAck(NextSeq(), ProtocolConst.AckAuthorized, isFinal: true);
                 _discoveryClient?.Send(ack, ack.Length, remote);
@@ -316,10 +344,20 @@ namespace DashboardHost.Core
                     switch (frame.Type)
                     {
                         case ProtocolConst.TypePenEvent:
-                            var pen = PenEventPayload.Parse(frame.Payload);
-                            if (pen != null)
+                            string ipStr = remote.Address.ToString();
+                            if (_peerInfo.TryGetValue(ipStr, out var devInfo) && _deviceManager.IsAuthorized(devInfo.DeviceId))
                             {
-                                _inputInjector.ProcessPenEvent(pen);
+                                var pen = PenEventPayload.Parse(frame.Payload);
+                                if (pen != null)
+                                {
+                                    _inputInjector.ProcessPenEvent(pen);
+                                }
+                            }
+                            else
+                            {
+                                // Unauthorized or revoked device — reject and notify client
+                                byte[] bye = Wire.Bye(NextSeq());
+                                await client.SendAsync(bye, bye.Length, remote);
                             }
                             break;
 
@@ -441,7 +479,7 @@ namespace DashboardHost.Core
                                     {
                                         _peerInfo.TryGetValue(usbIp, out var inf);
                                         string devId = inf.DeviceId ?? "usb_device";
-                                        string authMethod = string.Equals(code, DeviceManager.MasterPassword, StringComparison.Ordinal) ? "Password" : "PIN";
+                                        string authMethod = (!string.IsNullOrEmpty(_deviceManager.ConfiguredPassword) && string.Equals(code, _deviceManager.ConfiguredPassword, StringComparison.Ordinal)) ? "Password" : "PIN";
                                         _deviceManager.AuthorizeDevice(devId, inf.Name ?? "USB Tablet", "USB", authMethod);
                                         byte[] ack = Wire.HelloAck(NextSeq(), ProtocolConst.AckAuthorized, isFinal: true);
                                         await stream.WriteAsync(ack, 0, ack.Length, token);
@@ -469,10 +507,21 @@ namespace DashboardHost.Core
                                 break;
 
                             case ProtocolConst.TypePenEvent:
-                                var pen = PenEventPayload.Parse(payload);
-                                if (pen != null)
+                                _peerInfo.TryGetValue(usbIp, out var usbInf);
+                                if (usbInf.DeviceId != null && _deviceManager.IsAuthorized(usbInf.DeviceId))
                                 {
-                                    _inputInjector.ProcessPenEvent(pen);
+                                    var pen = PenEventPayload.Parse(payload);
+                                    if (pen != null)
+                                    {
+                                        _inputInjector.ProcessPenEvent(pen);
+                                    }
+                                }
+                                else
+                                {
+                                    byte[] bye = Wire.Bye(NextSeq());
+                                    await stream.WriteAsync(bye, 0, bye.Length, token);
+                                    await stream.FlushAsync(token);
+                                    return;
                                 }
                                 break;
 
