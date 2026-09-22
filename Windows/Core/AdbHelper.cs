@@ -20,15 +20,23 @@ namespace DashboardHost.Core
         public bool Success => Status == AdbStatus.Success;
         public string Message { get; init; } = "";
         public string? Guidance { get; init; }
+
+        public void Deconstruct(out bool success, out string message)
+        {
+            success = Success;
+            message = Message;
+        }
     }
 
     public static class AdbHelper
     {
         public static string? FindAdbPath()
         {
+            string exeName = OperatingSystem.IsWindows() ? "adb.exe" : "adb";
+
             // 0. Bundled in app
             string baseDir = AppContext.BaseDirectory;
-            foreach (var rel in new[] { Path.Combine("adb", "adb.exe"), "adb.exe" })
+            foreach (var rel in new[] { Path.Combine("adb", exeName), exeName })
             {
                 string c = Path.Combine(baseDir, rel);
                 if (File.Exists(c)) return c;
@@ -42,31 +50,49 @@ namespace DashboardHost.Core
                 {
                     try
                     {
-                        string c = Path.Combine(dir.Trim(), "adb.exe");
+                        string c = Path.Combine(dir.Trim(), exeName);
                         if (File.Exists(c)) return c;
                     }
                     catch { }
                 }
             }
 
-            // 2. Common SDK locations
-            string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string[] candidates =
+            // 2. Common Unix / macOS locations
+            if (!OperatingSystem.IsWindows())
             {
-                Path.Combine(local, "Android", "Sdk", "platform-tools", "adb.exe"),
-                @"C:\Android\platform-tools\adb.exe",
-                @"C:\Program Files\Android\android-sdk\platform-tools\adb.exe",
-            };
-            foreach (var c in candidates)
-                if (File.Exists(c)) return c;
+                string[] unixCandidates =
+                {
+                    "/usr/bin/adb",
+                    "/usr/local/bin/adb",
+                    "/opt/homebrew/bin/adb",
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Android", "sdk", "platform-tools", "adb"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Android", "Sdk", "platform-tools", "adb")
+                };
+                foreach (var c in unixCandidates)
+                    if (File.Exists(c)) return c;
+            }
 
-            // 3. ANDROID_HOME / ANDROID_SDK_ROOT
+            // 3. Common Windows SDK locations
+            if (OperatingSystem.IsWindows())
+            {
+                string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string[] candidates =
+                {
+                    Path.Combine(local, "Android", "Sdk", "platform-tools", "adb.exe"),
+                    @"C:\Android\platform-tools\adb.exe",
+                    @"C:\Program Files\Android\android-sdk\platform-tools\adb.exe",
+                };
+                foreach (var c in candidates)
+                    if (File.Exists(c)) return c;
+            }
+
+            // 4. ANDROID_HOME / ANDROID_SDK_ROOT
             foreach (var envVar in new[] { "ANDROID_HOME", "ANDROID_SDK_ROOT" })
             {
                 string? home = Environment.GetEnvironmentVariable(envVar);
                 if (!string.IsNullOrEmpty(home))
                 {
-                    string c = Path.Combine(home, "platform-tools", "adb.exe");
+                    string c = Path.Combine(home, "platform-tools", exeName);
                     if (File.Exists(c)) return c;
                 }
             }

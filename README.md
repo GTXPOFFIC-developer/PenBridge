@@ -1,100 +1,143 @@
-# Dashboard — tablet as a pen tablet
+# PenBridge — Universal Tablet-as-Digitizer Bridge
 
-Turn any stylus-capable Android tablet into a (Wacom-style) pen tablet for
-your PC, over **USB** or **Wi-Fi**.
+Turn any **Android tablet** (S-Pen / active stylus) or **iPad** (Apple Pencil) into a professional low-latency pen tablet (Wacom-style) for **Windows**, **Linux**, and **macOS**, over **USB** or **Wi-Fi**.
 
-This repository contains the **Android app** (Kotlin + Jetpack Compose,
-Material 3, dark glassmorphism UI). It captures stylus samples at up to the
-display's refresh rate and streams them with a compact binary protocol
-defined in [PROTOCOL.md](PROTOCOL.md).
+---
 
-> Windows host app: currently on hold (skipped by request). A tiny
-> PowerShell *test host* lives in `tools/host-probe.ps1` so you can verify
-> the tablet end-to-end without building anything.
+## Features
 
-## What's inside
+- ⚡ **Ultra-Low Latency**: Binary UDP stream up to 240 Hz with sub-millisecond packet overhead.
+- 🖊️ **Full Stylus Dynamics**: High-precision pressure, tilt (X/Y), hovering, barrel buttons, and eraser.
+- 🔌 **Dual Connection Modes**:
+  - **USB Mode**: Zero jitter, sub-millisecond latency via ADB reverse (Android) or USB tunnel (iOS).
+  - **Wi-Fi Mode**: Zero-configuration auto-discovery via mDNS (`_dashboard._udp.local`).
+- 🔐 **Zero-Setup Pairing**: Google OAuth auto-pairing allows tablet and PC signed into the same Google account to link instantly without entering codes.
+- 🎨 **Creative App Ready**: Tested and compatible with Photoshop, Krita, Clip Studio Paint, Blender, Affinity, and OneNote.
+- 🌐 **True Cross-Platform**: Native client apps for Android & iOS; native host background services for Windows, Linux, and macOS.
+
+---
+
+## Repository Structure
 
 ```
-Android/            Android Studio project (Gradle, Kotlin, Compose)
-  app/src/main/java/com/dashboard/
-    core/           protocol, connection manager, discovery, pen capture,
-                    Google OAuth sync
-    ui/             Home/Connect, Drawing surface, Settings screens
-builds/             built APK(s) land here
-tools/              host-probe.ps1 (test host for USB/Wi-Fi verification)
-PROTOCOL.md         binary wire protocol shared by both ends
+├── Android/                    # Android client app (Kotlin + Jetpack Compose)
+│   ├── app/src/main/java/      # PenSurfaceView, MdnsDiscovery, ConnectionManager
+│   └── app/src/main/res/       # Material 3 UI, vector assets, launcher icons
+├── iOS/                        # iOS / iPadOS client app (SwiftUI + PencilKit)
+│   ├── Dashboard.xcodeproj     # Xcode project
+│   ├── Package.swift           # Swift Package Manager definition
+│   ├── Sources/Dashboard/      # Apple Pencil capture, UDP/TCP networking
+│   └── build-ipa.sh            # Automated IPA builder script
+├── Windows/                    # Windows host service & UI (.NET 8 WPF)
+│   ├── Core/                   # SyntheticPointerInput driver, AdbHelper, Protocol
+│   ├── Installer/              # Inno Setup scripts (DashboardX64.iss, DashboardX86.iss)
+│   └── MainWindow.xaml         # Glassmorphism tray & status monitor
+├── Linux/                      # Linux host daemon (.NET 8)
+│   ├── LinuxInputInjector.cs   # Linux /dev/uinput virtual tablet driver
+│   ├── install.sh              # Systemd service installer & udev rules setup
+│   └── uninstall.sh            # Service and udev cleanup script
+├── macOS/                      # macOS host daemon (.NET 8)
+│   ├── MacInputInjector.cs     # CoreGraphics tablet event injector
+│   └── build-pkg.sh            # Universal binary packager (x64 + Apple Silicon)
+├── tools/                      # Diagnostic and debugging utilities
+│   └── host-probe.ps1          # Lightweight PowerShell test host
+├── .github/workflows/          # CI/CD automated release pipeline
+│   └── release.yml             # Builds & publishes releases for all 5 platforms
+└── PROTOCOL.md                 # Binary wire protocol specification
 ```
 
-## Prerequisites
+---
 
-- Android tablet with a stylus (S-Pen, Apple Pencil-style EMR/active pens).
-- Android Studio or JDK 17 + Android SDK (platform 34).
-- A PC on the same Wi-Fi (for Wi-Fi mode) or a USB cable (for USB mode).
-- For USB mode: `adb` (platform-tools) with **USB debugging** enabled on the
-  tablet.
+## Downloads & Releases
 
-## Build the app
+Pre-compiled releases for all platforms are published on [GitHub Releases](https://github.com/GTXPOFFIC-developer/PenBridge/releases):
 
+| Platform | Type | Release Asset | Description |
+|---|---|---|---|
+| **Android** | Client | `PenBridge-Android-v*.apk` | Android app with S-Pen & touch digitizer |
+| **Windows (x64)** | Host | `PenBridge-Windows-x64-v*.exe` | 64-bit Windows installer with driver & UI |
+| **Windows (x86)** | Host | `PenBridge-Windows-x86-v*.exe` | 32-bit Windows installer |
+| **Windows (Portable)**| Host | `DashboardHost-Windows-v*.zip` | Standalone portable Windows executable |
+| **Linux (x64)** | Host | `DashboardHost-Linux-v*.tar.gz` | Linux daemon with uinput & install scripts |
+| **macOS (Universal)** | Host | `DashboardHost-macOS-v*.zip` | macOS daemon (Apple Silicon + Intel) |
+| **iOS / iPadOS** | Client | `Dashboard-iOS-v*.zip` | Xcode archive & IPA export for iPad |
+
+---
+
+## Quick Start
+
+### 1. Windows Host Setup
+1. Download and run `PenBridge-Windows-x64-v*.exe`.
+2. The host will launch and minimize to the system tray, auto-opening firewall ports for UDP `41173` (discovery) and UDP `41174` (data).
+3. Connect your tablet via USB or ensure both devices are on the same Wi-Fi.
+
+### 2. Linux Host Setup
+```bash
+tar -xzvf DashboardHost-Linux-v*.tar.gz
+cd DashboardHost-Linux/
+sudo ./install.sh
+# Runs as a systemd background service with /dev/uinput permissions
+```
+
+### 3. macOS Host Setup
+```bash
+unzip DashboardHost-macOS-v*.zip
+# Grant Accessibility & Input Monitoring permissions when prompted
+./DashboardHost.macOS
+```
+
+### 4. Android Client Setup
+1. Install `PenBridge-Android-v*.apk` onto your tablet.
+2. Open PenBridge. Select **USB** or **Wi-Fi**.
+3. For USB mode: connect USB cable with USB Debugging enabled (the host automatically configures `adb reverse`).
+4. Start drawing!
+
+### 5. iOS / iPadOS Client Setup
+1. Build and install to iPad using Xcode or `build-ipa.sh`.
+2. Select your host computer discovered via mDNS.
+3. Use Apple Pencil on the canvas.
+
+---
+
+## Building from Source
+
+### Windows Host
+```powershell
+cd Windows
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+```
+
+### Linux Host
+```bash
+cd Linux
+dotnet publish -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true
+```
+
+### macOS Host
+```bash
+cd macOS
+dotnet publish -c Release -r osx-arm64 --self-contained true
+dotnet publish -c Release -r osx-x64  --self-contained true
+```
+
+### Android Client
 ```powershell
 cd Android
-.\gradlew.bat assembleDebug
-# APK lands at: build\outputs\apk\debug\app-debug.apk
+.\gradlew.bat assembleRelease
 ```
 
-Already-built APK: `builds\Dashboard-debug.apk`.
+### iOS Client
+```bash
+cd iOS
+./build-ipa.sh
+```
 
-## Optional: Google account link (Chrome-Remote-Desktop-style pairing)
+---
 
-When both the tablet and PC are signed into the **same Google account**,
-the PC auto-authorizes the tablet — no 6-digit code needed. Zero backend;
-the tablet just proves its identity over the live link (see PROTOCOL.md,
-`GOOGLE_AUTH`).
+## Protocol
 
-1. Create an OAuth client:
-   - Google Cloud Console → APIs & Services → Credentials → Create OAuth
-     client ID.
-   - Type **Desktop app** (no secret, PKCE only — best) or **Web
-     application** (requires the secret below).
-   - Add redirect URI: `http://localhost` (loopback, any port is fine).
-2. Put the values into
-   `Android/app/src/main/java/com/dashboard/core/GoogleAccountSync.kt`
-   (`GoogleConfig`).
+For wire format, packet headers, event flags, and OAuth exchange details, see [PROTOCOL.md](PROTOCOL.md).
 
-> Security note: a Web-client secret embedded in an APK can be extracted by
-> anyone who installs it. For personal LAN use that's acceptable, but a
-> **Desktop** OAuth client has no secret at all and is the safer choice.
+## License
 
-## Test it (no Windows app needed)
-
-1. Build & install: `adb install builds\Dashboard-debug.apk`
-2. Run the test host on your PC:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\tools\host-probe.ps1
-   ```
-3. **Wi-Fi:** tablet → toggle **Wi-Fi** → tap the discovered PC (or enter its
-   IP) → **Connected (ms chip turns green)**. Draw on the tablet; the host
-   prints live x/y/pressure/tilt + a per-minute sample rate.
-4. **USB:** with the cable plugged and USB debugging on:
-   ```
-   adb reverse tcp:41174 tcp:41174
-   ```
-   tablet → toggle **USB** → one-tap connect → draw.
-
-You should see the console counting pen samples at 60–240 Hz with sane
-y-flipped coordinates and 0–1 pressure.
-
-## Using it in Krita / Photoshop / Clip Studio
-
-A full `InjectSyntheticPointerInput` pen driver is part of the (skipped)
-Windows host app. The protocol carries pen **down / move / hover / up**,
-pressure and tilt explicitly so those apps' stroke engines can register
-strokes cleanly once the host wires them to synthetic `POINTER_PEN_INFO`.
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---|---|
-| Wi-Fi: no PC discovered | Router blocks broadcast; use **manual IP**. |
-| USB: stuck "Waiting for adb reverse" | Run `adb reverse tcp:41174 tcp:41174` after plugging in; keep tablet unlocked. |
-| `adb devices` shows `unauthorized` | Tap **Allow** on the tablet's USB-debugging dialog. |
-| Latency high | Use the wired channel; keep tablet on 5 GHz Wi-Fi; enable "force GPU" not required — samples are socket-direct. |
+This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.

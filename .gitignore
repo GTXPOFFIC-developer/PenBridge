@@ -42,3 +42,7 @@ desktop.ini
 builds/
 InstalledHost/
 scratch/
+*.zip
+*.tar.gz
+*.exe
+!Windows/app.ico
