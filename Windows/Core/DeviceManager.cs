@@ -26,6 +26,7 @@ namespace DashboardHost.Core
         private readonly ConcurrentDictionary<string, DeviceInfo> _allowedDevices = new(StringComparer.OrdinalIgnoreCase);
 
         public string CurrentPairingCode { get; private set; } = "123456";
+        public string? ConfiguredPassword { get; set; }
 
         public event Action? DevicesChanged;
 
@@ -34,6 +35,7 @@ namespace DashboardHost.Core
             string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DashboardHost");
             Directory.CreateDirectory(appData);
             _storagePath = Path.Combine(appData, "devices.json");
+            ConfiguredPassword = Environment.GetEnvironmentVariable("PENBRIDGE_PASSWORD");
             GenerateNewPairingCode();
             LoadAllowedDevices();
         }
@@ -47,7 +49,9 @@ namespace DashboardHost.Core
         public bool ValidatePairingCode(string submittedCode)
         {
             if (string.IsNullOrWhiteSpace(submittedCode)) return false;
-            return string.Equals(CurrentPairingCode.Trim(), submittedCode.Trim(), StringComparison.Ordinal);
+            string trimmed = submittedCode.Trim();
+            return string.Equals(CurrentPairingCode.Trim(), trimmed, StringComparison.Ordinal) ||
+                   (!string.IsNullOrEmpty(ConfiguredPassword) && string.Equals(ConfiguredPassword.Trim(), trimmed, StringComparison.Ordinal));
         }
 
         public bool IsAuthorized(string deviceId)

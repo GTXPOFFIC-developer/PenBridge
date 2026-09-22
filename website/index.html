@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PenBridge — Universal Tablet-as-Digitizer Bridge | Windows, macOS, Linux, Android, iOS</title>
+  <meta name="description" content="Turn any Android tablet or iPad into a professional low-latency pen tablet for Windows, Linux, and macOS over USB or Wi-Fi. Free, open source, up to 240Hz.">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="PenBridge">
+  <meta property="og:title" content="PenBridge — Universal Tablet-as-Digitizer Bridge">
+  <meta property="og:description" content="Turn your Android tablet or iPad into a low-latency drawing tablet for PC/Mac over USB or Wi-Fi. Free & Open Source.">
+  <meta property="og:image" content="assets/hero-3d-tablet.jpg">
+
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300f5ff'><path d='M12 2L2 22h20L12 2zm0 4.5l6.5 13.5h-13L12 6.5z'/></svg>">
+
+  <!-- Google Fonts: Space Grotesk, Outfit, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+
+<body>
+  <!-- Ambient Aurora & Glowing Ribbons Background -->
+  <div class="aurora" aria-hidden="true">
+    <div class="aurora__glow aurora__glow--cyan"></div>
+    <div class="aurora__glow aurora__glow--violet"></div>
+    <div class="aurora__glow aurora__glow--magenta"></div>
+    <svg class="noodles" viewBox="0 0 1440 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <g class="noodles__a">
+        <path d="M-120 210C120 90 340 300 560 190S980 20 1200 150s300 40 420 -30" />
+        <path d="M-120 300C140 170 330 400 570 280S1000 100 1220 240s280 60 400 -20" />
+        <path d="M-120 392C160 250 320 500 580 370S1020 180 1240 330s260 80 380 -10" />
+      </g>
+      <g class="noodles__b">
+        <path d="M-140 720C160 830 300 610 540 700s400 200 640 90 340 -140 480 -60" />
+        <path d="M-140 812C180 930 290 700 560 800s390 210 630 100 330 -150 470 -70" />
+        <path d="M-140 900C200 1010 280 790 580 890s380 220 620 110 320 -160 460 -80" />
+      </g>
+    </svg>
+    <canvas id="starfield" class="starfield"></canvas>
+  </div>
+
+  <!-- Navigation Bar -->
+  <header class="nav" id="nav">
+    <div class="wrap nav__inner">
+      <a class="nav__brand" href="#top" aria-label="PenBridge Home">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+            <path d="M2 2l7.586 7.586"/>
+            <circle cx="11" cy="11" r="2"/>
+          </svg>
+        </div>
+        <span class="brand-text">Pen<span class="brand-highlight">Bridge</span></span>
+        <span class="version-tag">v1.1.0</span>
+      </a>
+
+      <nav class="nav__links" id="nav-links" aria-label="Primary Navigation">
+        <a href="#overview">Overview</a>
+        <a href="#demo">Live Demo</a>
+        <a href="#features">Features</a>
+        <a href="#protocol">Protocol</a>
+        <a href="#downloads">Downloads</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+
+      <div class="nav__actions">
+        <a class="btn btn--github" href="https://github.com/GTXPOFFIC-developer/PenBridge" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          <span>Star</span>
+        </a>
+        <a class="btn btn--primary btn--sm nav__cta" id="nav-download-cta" href="#downloads">Download</a>
+        <button class="nav__toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="Toggle menu">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 7h16M4 12h16M4 17h16"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero Section -->
+    <section class="hero" id="top">
+      <div class="wrap hero__inner">
+        <div class="pill-badge" data-reveal>
+          <span class="pill-pulse"></span>
+          <span class="pill-text">v1.1.0 Released — Native Stylus Drivers & Zero-Latency UDP</span>
+        </div>
+
+        <h1 data-reveal>
+          Turn your tablet into a <br>
+          <span class="grad">pro-grade drawing tablet</span>.
+        </h1>
+
+        <p class="hero__subtitle" data-reveal>
+          Stream ultra-low latency stylus input up to <strong>240 Hz</strong> with <strong>4096 pressure levels</strong> and tilt dynamics from Android or iPad straight to Windows, Linux, and macOS over USB or Wi-Fi.
+        </p>
+
+        <div class="btn-row" data-reveal>
+          <a class="btn btn--primary btn--lg btn-glow" id="hero-os-btn" href="#downloads">
+            <span class="btn-icon" id="hero-os-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+              </svg>
+            </span>
+            <span class="btn-text">
+              <span class="btn-subtext" id="hero-os-subtext">Download for Windows</span>
+              <span class="btn-title" id="hero-os-title">PenBridge Installer (.exe)</span>
+            </span>
+          </a>
+
+          <a class="btn btn--quiet btn--lg" href="#demo">
+            <span>Test Live Digitizer</span>
+            <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14m-6-6 6 6-6 6"/>
+            </svg>
+          </a>
+        </div>
+
+        <p class="fine" data-reveal>
+          Free forever &middot; Open Source (Apache 2.0) &middot; Windows, Linux, macOS, Android, iOS &middot; <span class="tnum">v1.1.0</span>
+        </p>
+      </div>
+
+      <!-- 3D Perspective Hero Frame -->
+      <div class="wrap shot-frame" data-reveal>
+        <div class="shot-3d-wrapper" id="shot-3d-card">
+          <figure class="shot">
+            <img src="assets/hero-3d-tablet.jpg"
+                 width="1336" height="752"
+                 fetchpriority="high"
+                 alt="3D product render of PenBridge floating digital tablet with glowing neon cyan and purple light trails drawn by a precision stylus pen.">
+            <div class="shot-glare"></div>
+
+            <!-- Floating 3D Metric Badges -->
+            <div class="float-badge float-badge--top-left">
+              <div class="badge-dot"></div>
+              <div class="badge-content">
+                <span class="badge-label">Latency</span>
+                <span class="badge-value">0.8 ms (USB)</span>
+              </div>
+            </div>
+
+            <div class="float-badge float-badge--bottom-right">
+              <div class="badge-dot badge-dot--purple"></div>
+              <div class="badge-content">
+                <span class="badge-label">Streaming Rate</span>
+                <span class="badge-value">240 Hz Native</span>
+              </div>
+            </div>
+
+            <div class="float-badge float-badge--top-right">
+              <div class="badge-dot badge-dot--amber"></div>
+              <div class="badge-content">
+                <span class="badge-label">Precision</span>
+                <span class="badge-value">4096 Levels</span>
+              </div>
+            </div>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- Numbers / Stats Counter -->
+    <section class="section--tight" id="overview">
+      <div class="wrap">
+        <dl class="stats" data-reveal>
+          <div class="stat">
+            <dt class="tnum" data-count="1" data-prefix="<" data-suffix="ms">&lt; 1ms</dt>
+            <dd>USB Packet Latency</dd>
+          </div>
+          <div class="stat">
+            <dt class="tnum" data-count="240" data-suffix=" Hz">240 Hz</dt>
+            <dd>Sampling Rate</dd>
+          </div>
+          <div class="stat">
+            <dt class="tnum" data-count="4096">4096</dt>
+            <dd>Pressure Levels</dd>
+          </div>
+          <div class="stat">
+            <dt class="tnum" data-count="5">5</dt>
+            <dd>Platforms Supported</dd>
+          </div>
+          <div class="stat">
+            <dt><span class="mark-circle">100% Free</span></dt>
+            <dd>No ads, no subscriptions</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- Interactive Live Digitizer Demo Section -->
+    <section class="section" id="demo">
+      <div class="wrap">
+        <div class="head" data-reveal>
+          <span class="label">Live Test Canvas</span>
+          <h2>Experience the latency & dynamics.</h2>
+          <p class="lede">
+            Test stylus, touch, or mouse input directly in your browser. Watch real-time sample rates, pressure curves, and stroke smoothing in action.
+          </p>
+        </div>
+
+        <div class="demo-card glass-panel" data-reveal>
+          <div class="demo-toolbar">
+            <div class="tool-group">
+              <label for="brush-color">Color</label>
+              <div class="color-picker-wrap">
+                <input type="color" id="brush-color" value="#00f5ff">
+              </div>
+            </div>
+
+            <div class="tool-group">
+              <label for="brush-size">Size: <span id="brush-size-val">4px</span></label>
+              <input type="range" id="brush-size" min="1" max="40" value="4">
+            </div>
+
+            <div class="tool-group tool-group--stats">
+              <div class="metric-pill">
+                <span class="metric-name">Samples/sec:</span>
+                <span class="metric-val" id="demo-hz">0 Hz</span>
+              </div>
+              <div class="metric-pill">
+                <span class="metric-name">Pressure:</span>
+                <span class="metric-val" id="demo-pressure">0.00</span>
+              </div>
+              <div class="metric-pill">
+                <span class="metric-name">Tilt X/Y:</span>
+                <span class="metric-val" id="demo-tilt">0° / 0°</span>
+              </div>
+            </div>
+
+            <div class="tool-group tool-group--actions">
+              <button class="btn btn--quiet btn--sm" id="demo-clear">Clear Surface</button>
+            </div>
+          </div>
+
+          <div class="canvas-container">
+            <canvas id="drawing-canvas"></canvas>
+            <div class="canvas-hint" id="canvas-hint">
+              <span>Draw here with your pen, touch, or mouse</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3D Feature Showcase Section -->
+    <section class="section" id="features">
+      <div class="wrap">
+        <div class="head" data-reveal>
+          <span class="label">Engineered for Artists</span>
+          <h2>Built for the lowest latency possible.</h2>
+          <p class="lede">
+            Whether you use Krita, Photoshop, Clip Studio Paint, Blender, or OneNote, PenBridge delivers instant synthetic pointer injection that feels just like a dedicated drawing tablet.
+          </p>
+        </div>
+
+        <div class="features-grid">
+          <!-- Feature 1: 3D Render Big Card -->
+          <div class="feature-card feature-card--featured glass-panel" data-reveal>
+            <div class="feature-card__visual">
+              <img src="assets/bridge-3d-render.jpg" width="1200" height="675" alt="3D visualization of ultra-low latency data streaming over USB and Wi-Fi" loading="lazy">
+              <div class="visual-glow"></div>
+            </div>
+            <div class="feature-card__body">
+              <span class="feature-tag">Core Architecture</span>
+              <h3>Sub-Millisecond Wire Protocol</h3>
+              <p>
+                Our 24-byte binary UDP wire protocol strips away all HTTP overhead. Coordinate updates and high-precision pressure floats stream directly into the operating system driver within fractions of a millisecond.
+              </p>
+              <div class="feature-pills">
+                <span>Direct UDP</span>
+                <span>ADB Reverse Tunnel</span>
+                <span>Zero Serialization Lag</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature 2 -->
+          <div class="feature-card glass-panel" data-reveal>
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#00f5ff" stroke-width="2">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+            </div>
+            <h3>Dual Connection Modes</h3>
+            <p>
+              Plug in with USB for rock-solid zero-jitter studio drawing with automatic ADB reverse configuration, or switch to Wi-Fi for wireless freedom with automatic mDNS peer discovery.
+            </p>
+          </div>
+
+          <!-- Feature 3 -->
+          <div class="feature-card glass-panel" data-reveal>
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#a855f7" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+            </div>
+            <h3>Full Stylus Dynamics</h3>
+            <p>
+              Captures hovering, pressure dynamics up to 4096 levels, barrel buttons, eraser mode, and dual-axis tilt (±90°). Every nuance of your S-Pen or Apple Pencil is faithfully transmitted.
+            </p>
+          </div>
+
+          <!-- Feature 4 -->
+          <div class="feature-card glass-panel" data-reveal>
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#ec4899" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+            <h3>Zero-Setup Google Account Pairing</h3>
+            <p>
+              Sign in with the same Google Account on both tablet and PC to link automatically without typing IP addresses or 6-digit codes. Chrome Remote Desktop-style pairing with zero backend servers.
+            </p>
+          </div>
+
+          <!-- Feature 5 -->
+          <div class="feature-card glass-panel" data-reveal>
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#38bdf8" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+            </div>
+            <h3>Synthetic OS Pointer Drivers</h3>
+            <p>
+              Uses native Windows <code class="inline-code">InjectSyntheticPointerInput</code>, Linux <code class="inline-code">/dev/uinput</code>, and macOS CoreGraphics digitizer APIs for native driver-level pen integration.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Protocol Section -->
+    <section class="section" id="protocol">
+      <div class="wrap">
+        <div class="head" data-reveal>
+          <span class="label">Binary Wire Format</span>
+          <h2>24 Bytes. Zero Bloat.</h2>
+          <p class="lede">
+            PenBridge is designed for performance. Here is the compact binary packet transmitted over the wire for every pen event.
+          </p>
+        </div>
+
+        <div class="protocol-box glass-panel" data-reveal>
+          <div class="protocol-grid">
+            <div class="proto-cell"><span class="proto-offset">0..1</span><span class="proto-name">Magic (0x5042)</span><span class="proto-type">uint16</span></div>
+            <div class="proto-cell"><span class="proto-offset">2</span><span class="proto-name">Event Type</span><span class="proto-type">uint8</span></div>
+            <div class="proto-cell"><span class="proto-offset">3</span><span class="proto-name">Tool Type</span><span class="proto-type">uint8</span></div>
+            <div class="proto-cell"><span class="proto-offset">4..7</span><span class="proto-name">Normalized X</span><span class="proto-type">float32</span></div>
+            <div class="proto-cell"><span class="proto-offset">8..11</span><span class="proto-name">Normalized Y</span><span class="proto-type">float32</span></div>
+            <div class="proto-cell"><span class="proto-offset">12..15</span><span class="proto-name">Pressure (0..1)</span><span class="proto-type">float32</span></div>
+            <div class="proto-cell"><span class="proto-offset">16..17</span><span class="proto-name">Tilt X (-90..90)</span><span class="proto-type">int16</span></div>
+            <div class="proto-cell"><span class="proto-offset">18..19</span><span class="proto-name">Tilt Y (-90..90)</span><span class="proto-type">int16</span></div>
+            <div class="proto-cell"><span class="proto-offset">20..23</span><span class="proto-name">Timestamp / Flags</span><span class="proto-type">uint32</span></div>
+          </div>
+
+          <div class="protocol-stream">
+            <div class="stream-header">
+              <span class="stream-title">Live Wire Stream (Simulated UDP Port 41174)</span>
+              <span class="stream-status"><span class="status-dot"></span> LIVE 240Hz</span>
+            </div>
+            <pre class="stream-code" id="hex-stream">50 42 02 01 3F 2A E1 47 3F 58 92 1A 3E C8 00 00 00 0C FF F4 00 01 A4 2F</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Multi-Platform Downloads Matrix -->
+    <section class="section" id="downloads">
+      <div class="wrap">
+        <div class="head" data-reveal>
+          <span class="label">Releases & Packages</span>
+          <h2>Download PenBridge v1.1.0</h2>
+          <p class="lede">
+            Native host background services for your PC and companion client apps for your tablets.
+          </p>
+        </div>
+
+        <div class="downloads-grid">
+          <!-- Windows x64 -->
+          <div class="download-card glass-panel" id="card-windows" data-reveal>
+            <div class="download-header">
+              <div class="os-icon">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="#00f5ff">
+                  <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+                </svg>
+              </div>
+              <div class="os-info">
+                <h3>Windows (x64)</h3>
+                <span class="badge">Recommended</span>
+              </div>
+            </div>
+            <p class="card-desc">Windows 10 & 11 64-bit installer with Inno Setup auto-dependency detection, driver & system tray monitor.</p>
+            <div class="card-actions">
+              <a class="btn btn--primary btn--full" href="https://github.com/GTXPOFFIC-developer/PenBridge/releases/download/v1.1.0/PenBridge-Windows-x64-v1.1.0.exe">Download .exe Installer</a>
+              <a class="btn btn--quiet btn--full" href="https://github.com/GTXPOFFIC-developer/PenBridge/releases/download/v1.1.0/PenBridge-Windows-x86-v1.1.0.exe">Windows 32-bit (x86) .exe</a>
+            </div>
+          </div>
+
+          <!-- macOS Universal -->
+          <div class="download-card glass-panel" id="card-macos" data-reveal>
+            <div class="download-header">
+              <div class="os-icon">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="#a855f7">
+                  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8 0.92-2.85-.9.04-1.99.6-2.64 1.35-.58.67-.09 1.74.05 2.78.99.08 2.05-.53 2.67-1.28"/>
+                </svg>
+              </div>
+              <div class="os-info">
+                <h3>macOS (Universal)</h3>
+                <span class="badge">Apple Silicon + Intel</span>
+              </div>
+            </div>
+            <p class="card-desc">Universal binary for macOS 12+ Monterey, Ventura, Sonoma, and Sequoia with CoreGraphics digitizer driver.</p>
+            <div class="card-actions">
+              <a class="btn btn--primary btn--full" href="https://github.com/GTXPOFFIC-developer/PenBridge/releases/download/v1.1.0/DashboardHost-macOS-v1.1.0.zip">Download macOS .zip</a>
+            </div>
+          </div>
+
+          <!-- Linux x64 -->
+          <div class="download-card glass-panel" id="card-linux" data-reveal>
+            <div class="download-header">
+              <div class="os-icon">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="#ec4899">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 2a10 10 0 0 0-10 10c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.1-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/>
+                </svg>
+              </div>
+              <div class="os-info">
+                <h3>Linux (x64)</h3>
+                <span class="badge">uinput Daemon</span>
+              </div>
+            </div>
+            <p class="card-desc">Self-contained daemon for Ubuntu, Fedora, Arch & Debian with systemd service and udev rule setup script.</p>
+            <div class="card-actions">
+              <a class="btn btn--primary btn--full" href="https://github.com/GTXPOFFIC-developer/PenBridge/releases/download/v1.1.0/DashboardHost-Linux-v1.1.0.tar.gz">Download Linux .tar.gz</a>
+            </div>
+          </div>
+
+          <!-- Android APK -->
+          <div class="download-card glass-panel" id="card-android" data-reveal>
+            <div class="download-header">
+              <div class="os-icon">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="#22c55e">
+                  <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993.0001.5511-.4483.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.411 13.856 8.1 12 8.1s-3.5902.311-5.1368.8507L4.8409 5.4477a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.152 5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396"/>
+                </svg>
+              </div>
+              <div class="os-info">
+                <h3>Android Tablet</h3>
+                <span class="badge">Kotlin + Compose</span>
+              </div>
+            </div>
+            <p class="card-desc">Direct APK install with Samsung S-Pen, Lenovo Precision Pen & active stylus support at up to 120Hz/240Hz.</p>
+            <div class="card-actions">
+              <a class="btn btn--primary btn--full" href="https://github.com/GTXPOFFIC-developer/PenBridge/releases/download/v1.1.0/PenBridge-Android-v1.1.0.apk">Download Android APK</a>
+            </div>
+          </div>
+
+          <!-- iOS / iPadOS -->
+          <div class="download-card glass-panel" id="card-ios" data-reveal>
+            <div class="download-header">
+              <div class="os-icon">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="#38bdf8">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+              </div>
+              <div class="os-info">
+                <h3>iOS / iPadOS</h3>
+                <span class="badge">Apple Pencil</span>
+              </div>
+            </div>
+            <p class="card-desc">SwiftUI + PencilKit client for iPad Pro and iPad Air with pressure, tilt angle, and azimith tracking.</p>
+            <div class="card-actions">
+              <a class="btn btn--primary btn--full" href="https://github.com/GTXPOFFIC-developer/PenBridge/releases/download/v1.1.0/Dashboard-iOS-v1.1.0.zip">Download iOS Archive</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="section" id="faq">
+      <div class="wrap">
+        <div class="head" data-reveal>
+          <span class="label">Questions & Answers</span>
+          <h2>Frequently Asked Questions</h2>
+        </div>
+
+        <div class="faq-list" data-reveal>
+          <details class="faq-item glass-panel">
+            <summary>
+              <span>How does PenBridge achieve &lt; 1ms latency?</span>
+              <svg class="faq-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </summary>
+            <div class="faq-body">
+              <p>
+                PenBridge avoids standard HTTP or WebSocket overhead. In USB mode, it establishes a direct socket connection over an ADB reverse tunnel (or local USB pipe on iOS), transmitting raw 24-byte binary UDP/TCP packets directly to a driver thread that calls OS-native synthetic pointer APIs.
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item glass-panel">
+            <summary>
+              <span>Does it work with Photoshop, Krita, and Blender?</span>
+              <svg class="faq-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </summary>
+            <div class="faq-body">
+              <p>
+                Yes! Because the Windows host injects real <code class="inline-code">POINTER_PEN_INFO</code> events into the Windows Pointer Input subsystem (and Linux uses <code class="inline-code">/dev/uinput</code>), apps treat PenBridge exactly like a hardware Wacom, Huion, or Microsoft Surface pen digitizer.
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item glass-panel">
+            <summary>
+              <span>Is a Google account required?</span>
+              <svg class="faq-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </summary>
+            <div class="faq-body">
+              <p>
+                No. Google account pairing is completely optional. You can connect over USB with one click, or enter your PC's local IP address or rely on mDNS zero-conf without ever signing into any account.
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item glass-panel">
+            <summary>
+              <span>Why is PenBridge completely free?</span>
+              <svg class="faq-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </summary>
+            <div class="faq-body">
+              <p>
+                PenBridge is an open-source community project developed under the Apache License 2.0. There are no subscription fees, no locked features, no advertisements, and no telemetry data collection.
+              </p>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="wrap footer__inner">
+      <div class="footer__brand">
+        <div class="brand-text">Pen<span class="brand-highlight">Bridge</span></div>
+        <p class="footer__desc">The universal low-latency tablet digitizer bridge for creators and developers.</p>
+        <p class="footer__copy">&copy; 2026 GTXPOFFIC-developer. Licensed under Apache 2.0.</p>
+      </div>
+
+      <div class="footer__links">
+        <div class="footer__col">
+          <h4>Product</h4>
+          <a href="#overview">Overview</a>
+          <a href="#demo">Live Demo</a>
+          <a href="#features">Features</a>
+          <a href="#downloads">Downloads</a>
+        </div>
+        <div class="footer__col">
+          <h4>Developers</h4>
+          <a href="#protocol">Protocol Specification</a>
+          <a href="https://github.com/GTXPOFFIC-developer/PenBridge" target="_blank" rel="noopener">GitHub Repository</a>
+          <a href="https://github.com/GTXPOFFIC-developer/PenBridge/releases" target="_blank" rel="noopener">Release Notes</a>
+          <a href="https://github.com/GTXPOFFIC-developer/PenBridge/issues" target="_blank" rel="noopener">Issue Tracker</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

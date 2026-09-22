@@ -281,6 +281,35 @@ namespace DashboardHost.Core
             return false;
         }
 
+        public async Task<bool> VerifyTokenOnlyAsync(string accessToken, string assertedEmail)
+        {
+            if (string.IsNullOrWhiteSpace(accessToken) || string.IsNullOrWhiteSpace(assertedEmail))
+                return false;
+
+            try
+            {
+                var resp = await HttpClient.GetAsync($"https://oauth2.googleapis.com/tokeninfo?access_token={Uri.EscapeDataString(accessToken)}");
+                if (!resp.IsSuccessStatusCode) return false;
+
+                string json = await resp.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("email", out var emailProp))
+                {
+                    string verifiedEmail = emailProp.GetString() ?? "";
+                    if (string.Equals(verifiedEmail, assertedEmail, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"VerifyTokenOnly error: {ex.Message}");
+            }
+
+            return false;
+        }
+
         private static string GenerateRandomBase64Url(int byteCount)
         {
             byte[] bytes = new byte[byteCount];

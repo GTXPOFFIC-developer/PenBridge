@@ -9,19 +9,29 @@ android {
 
     defaultConfig {
         applicationId = "com.penbridge.tablet"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
+        create("release") {
+            storeFile = file("release.keystore")
+            storePassword = "penbridgepassword"
+            keyAlias = "penbridge"
+            keyPassword = "penbridgepassword"
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+            enableV4Signing = true
+        }
         getByName("debug") {
-            storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            storeFile = file("release.keystore")
+            storePassword = "penbridgepassword"
+            keyAlias = "penbridge"
+            keyPassword = "penbridgepassword"
         }
     }
 
@@ -33,8 +43,9 @@ android {
             isDebuggable = true
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

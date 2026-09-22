@@ -27,21 +27,26 @@ class DashboardApp : Application() {
     }
 
     /**
-     * Short haptic pulse using [VibrationEffect] (API 26+, matches minSdk).
+     * Short haptic pulse using [VibrationEffect] (API 26+).
+     * Falls back to legacy vibration on API 24-25.
      * Uses [VibratorManager] on API 31+ to avoid deprecated [Vibrator] access.
      */
     fun vibrate(ms: Long = 12) {
         try {
-            val effect = VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 (getSystemService(VibratorManager::class.java))
                     ?.defaultVibrator
-                    ?.vibrate(effect)
+                    ?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                @Suppress("DEPRECATION")
+                (getSystemService(VIBRATOR_SERVICE) as? Vibrator)
+                    ?.takeIf { it.hasVibrator() }
+                    ?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
             } else {
                 @Suppress("DEPRECATION")
                 (getSystemService(VIBRATOR_SERVICE) as? Vibrator)
                     ?.takeIf { it.hasVibrator() }
-                    ?.vibrate(effect)
+                    ?.vibrate(ms)
             }
         } catch (_: Exception) {}
     }

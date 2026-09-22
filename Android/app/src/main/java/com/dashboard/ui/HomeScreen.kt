@@ -190,14 +190,14 @@ fun HomeScreen(
             title = { Text("Pair with host") },
             text = {
                 Column {
-                    Text("Enter the 6-digit code shown on your PC's PenBridge window.")
+                    Text("Enter the 6-digit PIN shown on PC, or your configured host password.")
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
                         value = pairingCode,
-                        onValueChange = { pairingCode = it.filter { c -> c.isDigit() }.take(6) },
+                        onValueChange = { pairingCode = it },
                         singleLine = true,
-                        placeholder = { Text("000000") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        placeholder = { Text("PIN or Password") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         colors = txtColors(),
                     )
                 }

@@ -132,8 +132,8 @@ public enum Wire {
     }
 
     public static func pairRequest(seq: UInt16, code: String) -> Data {
-        let padded = code.prefix(6).padding(toLength: 6, withPad: "0", startingAt: 0)
-        return encode(type: ProtocolConst.typePairRequest, flags: ProtocolConst.flagPairing, seq: seq, payload: Data(padded.utf8))
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        return encode(type: ProtocolConst.typePairRequest, flags: ProtocolConst.flagPairing, seq: seq, payload: Data(trimmed.utf8))
     }
 }
 

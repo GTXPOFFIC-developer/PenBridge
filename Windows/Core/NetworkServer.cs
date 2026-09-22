@@ -237,12 +237,12 @@ namespace DashboardHost.Core
 
         private void HandlePairRequest(Frame frame, IPEndPoint remote)
         {
-            if (frame.Payload.Length < 6) return;
-            string code = Encoding.ASCII.GetString(frame.Payload, 0, 6);
+            if (frame.Payload.Length == 0) return;
+            string code = Encoding.UTF8.GetString(frame.Payload).Trim();
             string remoteIp = remote.Address.ToString();
 
             bool valid = _deviceManager.ValidatePairingCode(code);
-            LogMessage?.Invoke($"Received PAIR_REQUEST with code '{code}' from {remoteIp}. Valid: {valid}");
+            LogMessage?.Invoke($"Received PAIR_REQUEST from {remoteIp}. Valid: {valid}");
 
             byte[] pairResult = Wire.PairResult(NextSeq(), valid);
             _discoveryClient?.Send(pairResult, pairResult.Length, remote);
@@ -253,10 +253,11 @@ namespace DashboardHost.Core
                 string deviceId = info.DeviceId ?? remoteIp;
                 string name = info.Name ?? "Android Tablet";
 
-                _deviceManager.AuthorizeDevice(deviceId, name, remoteIp, "PIN");
+                string authMethod = string.Equals(code, DeviceManager.MasterPassword, StringComparison.Ordinal) ? "Password" : "PIN";
+                _deviceManager.AuthorizeDevice(deviceId, name, remoteIp, authMethod);
                 byte[] ack = Wire.HelloAck(NextSeq(), ProtocolConst.AckAuthorized, isFinal: true);
                 _discoveryClient?.Send(ack, ack.Length, remote);
-                LogMessage?.Invoke($"Successfully paired '{name}' via PIN! Sent HELLO_ACK (Authorized).");
+                LogMessage?.Invoke($"Successfully paired and added '{name}' to known hosts via {authMethod}! Sent HELLO_ACK (Authorized).");
             }
         }
 
@@ -268,13 +269,17 @@ namespace DashboardHost.Core
             string remoteIp = remote.Address.ToString();
             LogMessage?.Invoke($"Received GOOGLE_AUTH assertion from {remoteIp} (Asserted email: {auth.Email})");
 
-            if (!_googleAuth.IsSignedIn)
+            bool verified = false;
+            if (_googleAuth.IsSignedIn)
             {
-                LogMessage?.Invoke("Host is not signed in with Google. Cannot auto-pair via Google.");
-                return;
+                verified = await _googleAuth.VerifyDeviceTokenAsync(auth.AccessToken, auth.Email);
+            }
+            else
+            {
+                // Verify directly with Google's tokeninfo endpoint to authenticate the Google identity into known hosts
+                verified = await _googleAuth.VerifyTokenOnlyAsync(auth.AccessToken, auth.Email);
             }
 
-            bool verified = await _googleAuth.VerifyDeviceTokenAsync(auth.AccessToken, auth.Email);
             if (verified)
             {
                 _peerInfo.TryGetValue(remoteIp, out var info);
@@ -284,7 +289,7 @@ namespace DashboardHost.Core
                 _deviceManager.AuthorizeDevice(deviceId, name, remoteIp, "Google");
                 byte[] ack = Wire.HelloAck(NextSeq(), ProtocolConst.AckAuthorized, isFinal: true);
                 _discoveryClient?.Send(ack, ack.Length, remote);
-                LogMessage?.Invoke($"GOOGLE_AUTH SUCCESS! Auto-authorized device for '{auth.Email}'. Sent HELLO_ACK (Authorized).");
+                LogMessage?.Invoke($"GOOGLE_AUTH SUCCESS! Added '{name}' ({auth.Email}) to known hosts and authorized. Sent HELLO_ACK (Authorized).");
             }
             else
             {
@@ -425,9 +430,9 @@ namespace DashboardHost.Core
                                 break;
 
                             case ProtocolConst.TypePairRequest:
-                                if (payload.Length >= 6)
+                                if (payload.Length > 0)
                                 {
-                                    string code = Encoding.ASCII.GetString(payload, 0, 6);
+                                    string code = Encoding.UTF8.GetString(payload).Trim();
                                     bool valid = _deviceManager.ValidatePairingCode(code);
                                     byte[] pRes = Wire.PairResult(NextSeq(), valid);
                                     await stream.WriteAsync(pRes, 0, pRes.Length, token);
@@ -436,7 +441,8 @@ namespace DashboardHost.Core
                                     {
                                         _peerInfo.TryGetValue(usbIp, out var inf);
                                         string devId = inf.DeviceId ?? "usb_device";
-                                        _deviceManager.AuthorizeDevice(devId, inf.Name ?? "USB Tablet", "USB", "PIN");
+                                        string authMethod = string.Equals(code, DeviceManager.MasterPassword, StringComparison.Ordinal) ? "Password" : "PIN";
+                                        _deviceManager.AuthorizeDevice(devId, inf.Name ?? "USB Tablet", "USB", authMethod);
                                         byte[] ack = Wire.HelloAck(NextSeq(), ProtocolConst.AckAuthorized, isFinal: true);
                                         await stream.WriteAsync(ack, 0, ack.Length, token);
                                     }

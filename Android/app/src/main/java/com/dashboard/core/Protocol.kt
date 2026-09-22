@@ -146,7 +146,7 @@ object Wire {
     private fun FLAG_OF(final: Boolean) = if (final) Const.FLAG_FINAL else 0
 
     fun pairRequest(seq: Int, code: String): ByteArray {
-        val c = code.take(6).padEnd(6, '0').toByteArray(Charsets.US_ASCII)
+        val c = code.trim().toByteArray(Charsets.UTF_8)
         return encode(Const.TYPE_PAIR_REQUEST, Const.FLAG_PAIRING, seq, c)
     }
 

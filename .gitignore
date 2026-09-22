@@ -42,6 +42,8 @@ desktop.ini
 builds/
 InstalledHost/
 scratch/
+publish/
+release_assets/
 *.zip
 *.tar.gz
 *.exe
