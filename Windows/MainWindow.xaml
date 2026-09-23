@@ -41,7 +41,7 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Dashboard Host" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
                         <Border Background="#252A4A" CornerRadius="4" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="v1.1.0" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentViolet}"/>
+                            <TextBlock Text="v1.2.0" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentViolet}"/>
                         </Border>
                     </StackPanel>
                     <TextBlock Text="Android / iOS Tablet → Windows Pen Bridge" FontSize="11" Foreground="{StaticResource TextMuted}"/>

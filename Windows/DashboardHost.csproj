@@ -10,7 +10,7 @@
     <AssemblyName>DashboardHost</AssemblyName>
     <RootNamespace>DashboardHost</RootNamespace>
     <Platforms>x64;AnyCPU</Platforms>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Company>Dashboard</Company>
     <Product>Dashboard Windows Host</Product>
     <Description>Windows Host for Android Dashboard tablet pen bridge</Description>

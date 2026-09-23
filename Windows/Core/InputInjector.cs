@@ -157,7 +157,8 @@ namespace DashboardHost.Core
 
         private IntPtr _syntheticPenDevice = IntPtr.Zero;
         private bool _useSyntheticPen = true;
-        private bool _wasInContact = false;
+        private bool _syntheticPenInContact = false;
+        private bool _mouseInContact = false;
         private bool _disposed = false;
 
         public MappingTarget Target { get; set; } = MappingTarget.PrimaryScreen;
@@ -254,12 +255,12 @@ namespace DashboardHost.Core
             if (evt.Action == ProtocolConst.ActionDown)
             {
                 mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
-                _wasInContact = true;
+                _mouseInContact = true;
             }
             else if (evt.Action == ProtocolConst.ActionUp)
             {
                 mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
-                _wasInContact = false;
+                _mouseInContact = false;
             }
         }
 
@@ -298,8 +299,7 @@ namespace DashboardHost.Core
                 case ProtocolConst.ActionDown:
                     flags |= POINTER_FLAGS.POINTER_FLAG_INRANGE | POINTER_FLAGS.POINTER_FLAG_INCONTACT |
                              POINTER_FLAGS.POINTER_FLAG_DOWN | POINTER_FLAGS.POINTER_FLAG_FIRSTBUTTON;
-                    _wasInContact = true;
-
+                    _syntheticPenInContact = true;
                     break;
 
                 case ProtocolConst.ActionMove:
@@ -307,33 +307,30 @@ namespace DashboardHost.Core
                     if (evt.Contact)
                     {
                         flags |= POINTER_FLAGS.POINTER_FLAG_INCONTACT | POINTER_FLAGS.POINTER_FLAG_FIRSTBUTTON;
-                        _wasInContact = true;
+                        _syntheticPenInContact = true;
                     }
-                    else if (_wasInContact)
+                    else if (_syntheticPenInContact)
                     {
-                        // Transition from contact to hover
                         flags |= POINTER_FLAGS.POINTER_FLAG_UP;
-                        _wasInContact = false;
+                        _syntheticPenInContact = false;
                     }
-
                     break;
 
                 case ProtocolConst.ActionHover:
                     flags |= POINTER_FLAGS.POINTER_FLAG_INRANGE | POINTER_FLAGS.POINTER_FLAG_UPDATE;
-                    if (_wasInContact)
+                    if (_syntheticPenInContact)
                     {
                         flags |= POINTER_FLAGS.POINTER_FLAG_UP;
-                        _wasInContact = false;
+                        _syntheticPenInContact = false;
                     }
-
                     break;
 
                 case ProtocolConst.ActionUp:
                 default:
-                    if (_wasInContact)
+                    if (_syntheticPenInContact)
                     {
                         flags |= POINTER_FLAGS.POINTER_FLAG_UP | POINTER_FLAGS.POINTER_FLAG_INRANGE;
-                        _wasInContact = false;
+                        _syntheticPenInContact = false;
                     }
                     else
                     {
@@ -348,7 +345,9 @@ namespace DashboardHost.Core
             bool success = InjectSyntheticPointerInput(_syntheticPenDevice, _pointerArray, 1);
             if (!success)
             {
-                // Fall back to mouse injection if synthetic pen input fails
+                // Fall back to mouse injection permanently for this session if synthetic pen input lacks privileges
+                _useSyntheticPen = false;
+                Debug.WriteLine("InjectSyntheticPointerInput failed. Falling back to mouse event injection.");
                 InjectMouse(evt, x, y);
             }
         }
@@ -357,15 +356,26 @@ namespace DashboardHost.Core
         {
             SetCursorPos(x, y);
 
-            if (evt.Contact && !_wasInContact)
+            if (evt.Barrel)
+            {
+                mouse_event(MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
+                return;
+            }
+
+            if (evt.Action == ProtocolConst.ActionDown || (evt.Contact && !_mouseInContact))
             {
                 mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
-                _wasInContact = true;
+                _mouseInContact = true;
             }
-            else if (!evt.Contact && _wasInContact)
+            else if (evt.Action == ProtocolConst.ActionUp || (!evt.Contact && _mouseInContact))
             {
                 mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
-                _wasInContact = false;
+                _mouseInContact = false;
+            }
+            else if (evt.Action == ProtocolConst.ActionHover && _mouseInContact)
+            {
+                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                _mouseInContact = false;
             }
         }
 

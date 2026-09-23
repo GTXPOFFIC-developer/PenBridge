@@ -48,6 +48,7 @@ sealed interface ConnState {
     data object Connecting : ConnState           // HELLO sent, waiting for ack
     data object PairingRequired : ConnState      // host demands a 6-digit code
     data class Connected(val host: HostInfo, val latencyMs: Int) : ConnState
+    data class Revoked(val hostName: String) : ConnState // host revoked authorization
 }
 
 /**
@@ -79,6 +80,7 @@ sealed interface ConnState {
 class ConnectionManager(
     appContext0: Context,
     private val google: GoogleAccountSync,
+    val sessionStore: SessionStore,
 ) {
     private val appContext = appContext0.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -343,10 +345,20 @@ class ConnectionManager(
     }
 
     private fun handleBye(from: String) {
-        if (activeHost.value?.ip == from || activeHost.value?.ip == "usb") {
+        val hName = activeHost.value?.name ?: nameFor(from)
+        sessionStore.markRevoked(from)
+        _state.value = ConnState.Revoked(hName)
+        activeHost.value = null
+    }
+
+    fun resetState() {
+        if (_state.value is ConnState.Revoked) {
             _state.value = ConnState.Disconnected
-            activeHost.value = null
         }
+    }
+
+    fun connectToSession(session: SavedSession) {
+        connectTo(HostInfo(session.ip, session.name, session.port))
     }
 
     private fun handleHelloAck(f: Frame, from: String) {
@@ -359,6 +371,18 @@ class ConnectionManager(
                 lastPongTime = System.currentTimeMillis()
                 _state.value = ConnState.Connected(host, _latency.value)
                 saveLastHost(from, host.name)
+                sessionStore.upsertSession(
+                    SavedSession(
+                        id = from,
+                        name = host.name,
+                        ip = from,
+                        port = host.port,
+                        mode = if (from == "usb") ConnectMode.USB else ConnectMode.WIFI,
+                        lastConnected = System.currentTimeMillis(),
+                        isPaired = true,
+                        authMethod = "PIN/Authorized",
+                    )
+                )
             }
             ACK_NEEDS_PAIRING -> {
                 val host = HostInfo(from, nameFor(from))
@@ -378,6 +402,18 @@ class ConnectionManager(
             lastPongTime = System.currentTimeMillis()
             _state.value = ConnState.Connected(host, _latency.value)
             saveLastHost(host.ip, host.name)
+            sessionStore.upsertSession(
+                SavedSession(
+                    id = host.ip,
+                    name = host.name,
+                    ip = host.ip,
+                    port = host.port,
+                    mode = if (host.ip == "usb") ConnectMode.USB else ConnectMode.WIFI,
+                    lastConnected = System.currentTimeMillis(),
+                    isPaired = true,
+                    authMethod = "PIN",
+                )
+            )
         } else if (!accepted && host != null && host.ip == from) {
             _lastError.value = "Pairing rejected by $from"
         }
@@ -433,6 +469,18 @@ class ConnectionManager(
                                 val host = HostInfo("usb", "USB (adb reverse)")
                                 activeHost.value = host
                                 _state.value = ConnState.Connected(host, _latency.value)
+                                sessionStore.upsertSession(
+                                    SavedSession(
+                                        id = "usb",
+                                        name = "USB Host",
+                                        ip = "usb",
+                                        port = DATA_PORT,
+                                        mode = ConnectMode.USB,
+                                        lastConnected = System.currentTimeMillis(),
+                                        isPaired = true,
+                                        authMethod = "USB",
+                                    )
+                                )
                             } else {
                                 activeHost.value = HostInfo("usb", "USB")
                                 _state.value = ConnState.PairingRequired
@@ -442,13 +490,27 @@ class ConnectionManager(
                             val host = HostInfo("usb", "USB (adb reverse)")
                             activeHost.value = host
                             _state.value = ConnState.Connected(host, _latency.value)
+                            sessionStore.upsertSession(
+                                SavedSession(
+                                    id = "usb",
+                                    name = "USB Host",
+                                    ip = "usb",
+                                    port = DATA_PORT,
+                                    mode = ConnectMode.USB,
+                                    lastConnected = System.currentTimeMillis(),
+                                    isPaired = true,
+                                    authMethod = "USB",
+                                )
+                            )
                         } else {
                             _lastError.value = "Pairing rejected over USB"
                         }
                         TYPE_PONG   -> handlePong(frame)
                         TYPE_CONFIG -> handleConfig(frame)
                         TYPE_BYE    -> {
-                            _state.value = ConnState.Disconnected
+                            val hName = activeHost.value?.name ?: "USB Host"
+                            sessionStore.markRevoked("usb")
+                            _state.value = ConnState.Revoked(hName)
                             activeHost.value = null
                             break
                         }

@@ -319,18 +319,23 @@ class PenSurfaceView(
         rawY: Float,
         historyPos: Int = -1,
     ) {
+        p.relative = false
         val w = if (width > 0) width else 1
         val h = if (height > 0) height else 1
         p.xNorm = ((rawX / w) * 65535f).toInt().coerceIn(0, 65535)
         p.yNorm = ((rawY / h) * 65535f).toInt().coerceIn(0, 65535)
 
-        val pressure = try {
+        val rawPressure = try {
             if (historyPos >= 0) e.getHistoricalAxisValue(MotionEvent.AXIS_PRESSURE, idx, historyPos)
             else e.getAxisValue(MotionEvent.AXIS_PRESSURE, idx)
         } catch (_: Exception) {
             e.pressure
         }
-        p.pressure = (pressure.coerceIn(0f, 1f) * 65535f).toInt().coerceIn(0, 65535)
+        var computedPressure = (rawPressure.coerceIn(0f, 1f) * 65535f).toInt().coerceIn(0, 65535)
+        if (p.contact && computedPressure <= 0) {
+            computedPressure = 32768 // Default to 50% pressure for fingers/capacitive styluses
+        }
+        p.pressure = computedPressure
 
         p.barrel = e.isButtonPressed(MotionEvent.BUTTON_STYLUS_PRIMARY)
         p.eraser = e.getToolType(idx) == MotionEvent.TOOL_TYPE_ERASER

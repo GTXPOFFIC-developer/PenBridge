@@ -73,6 +73,13 @@ private fun AppRoot(app: DashboardApp) {
         }
     }
 
+    val connState by app.connection.state.collectAsState()
+    LaunchedEffect(connState) {
+        if (connState is com.dashboard.core.ConnState.Revoked && screen == Screen.Draw) {
+            screen = Screen.Home
+        }
+    }
+
     AnimatedContent(
         targetState = screen,
         transitionSpec = {
@@ -92,7 +99,11 @@ private fun AppRoot(app: DashboardApp) {
                     app.connection.start(m, app.settings.settings.value.hostIp.takeIf { m == com.dashboard.core.ConnectMode.WIFI } ?: "")
                 },
             )
-            Screen.Draw -> DrawingScreen(app = app, onExit = { screen = Screen.Home })
+            Screen.Draw -> DrawingScreen(
+                app = app,
+                onExit = { screen = Screen.Home },
+                onOpenSettings = { screen = Screen.Settings },
+            )
             Screen.Settings -> SettingsScreen(app = app, onBack = { screen = Screen.Home })
         }
     }

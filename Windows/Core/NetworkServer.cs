@@ -27,6 +27,8 @@ namespace DashboardHost.Core
 
         // Peer endpoint -> (DeviceId, DeviceName)
         private readonly ConcurrentDictionary<string, (string DeviceId, string Name)> _peerInfo = new();
+        private readonly ConcurrentDictionary<string, TcpClient> _activeTcpClients = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, IPEndPoint> _lastKnownUdpEndpoints = new(StringComparer.OrdinalIgnoreCase);
 
         public bool IsRunning => _isRunning;
         public string HostName { get; set; } = Environment.MachineName;
@@ -49,6 +51,22 @@ namespace DashboardHost.Core
         {
             try
             {
+                // 1. Teardown active USB TCP clients for this device
+                if (_activeTcpClients.TryRemove(deviceId, out var tcpClient) || _activeTcpClients.TryRemove("usb", out tcpClient))
+                {
+                    try
+                    {
+                        byte[] bye = Wire.Bye(NextSeq());
+                        var stream = tcpClient.GetStream();
+                        stream.Write(bye, 0, bye.Length);
+                        stream.Flush();
+                        tcpClient.Close();
+                        LogMessage?.Invoke($"USB: Sent BYE frame and closed TCP connection for revoked device '{deviceId}'.");
+                    }
+                    catch { }
+                }
+
+                // 2. Teardown active Wi-Fi UDP endpoints for this device
                 foreach (var kvp in _peerInfo)
                 {
                     if (string.Equals(kvp.Value.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase))
@@ -56,11 +74,22 @@ namespace DashboardHost.Core
                         string ipStr = kvp.Key;
                         _peerInfo.TryRemove(ipStr, out _);
 
+                        byte[] bye = Wire.Bye(NextSeq());
+
+                        // Send directly to the active source endpoint the client is listening on
+                        if (_lastKnownUdpEndpoints.TryGetValue(ipStr, out var actualEp))
+                        {
+                            for (int i = 0; i < 3; i++)
+                            {
+                                try { _dataClient?.Send(bye, bye.Length, actualEp); } catch { }
+                                try { _discoveryClient?.Send(bye, bye.Length, actualEp); } catch { }
+                            }
+                        }
+
                         if (IPAddress.TryParse(ipStr, out var ip))
                         {
-                            byte[] bye = Wire.Bye(NextSeq());
-                            _dataClient?.Send(bye, bye.Length, new IPEndPoint(ip, ProtocolConst.DataPort));
-                            _discoveryClient?.Send(bye, bye.Length, new IPEndPoint(ip, ProtocolConst.DiscoveryPort));
+                            try { _dataClient?.Send(bye, bye.Length, new IPEndPoint(ip, ProtocolConst.DataPort)); } catch { }
+                            try { _discoveryClient?.Send(bye, bye.Length, new IPEndPoint(ip, ProtocolConst.DiscoveryPort)); } catch { }
                         }
                     }
                 }
@@ -213,6 +242,7 @@ namespace DashboardHost.Core
 
                     var remoteEndpoint = result.RemoteEndPoint;
                     string remoteIp = remoteEndpoint.Address.ToString();
+                    _lastKnownUdpEndpoints[remoteIp] = remoteEndpoint;
 
                     switch (frame.Type)
                     {
@@ -243,6 +273,7 @@ namespace DashboardHost.Core
             if (hello == null) return;
 
             string remoteIp = remote.Address.ToString();
+            _lastKnownUdpEndpoints[remoteIp] = remote;
             _peerInfo[remoteIp] = (hello.DeviceId, hello.Name);
 
             LogMessage?.Invoke($"Received HELLO from '{hello.Name}' ({remoteIp}, DeviceId: {hello.DeviceId})");
@@ -268,6 +299,7 @@ namespace DashboardHost.Core
             if (frame.Payload.Length == 0) return;
             string code = Encoding.UTF8.GetString(frame.Payload).Trim();
             string remoteIp = remote.Address.ToString();
+            _lastKnownUdpEndpoints[remoteIp] = remote;
 
             bool valid = _deviceManager.ValidatePairingCode(code);
             LogMessage?.Invoke($"Received PAIR_REQUEST from {remoteIp}. Valid: {valid}");
@@ -295,6 +327,7 @@ namespace DashboardHost.Core
             if (auth == null) return;
 
             string remoteIp = remote.Address.ToString();
+            _lastKnownUdpEndpoints[remoteIp] = remote;
             LogMessage?.Invoke($"Received GOOGLE_AUTH assertion from {remoteIp} (Asserted email: {auth.Email})");
 
             bool verified = false;
@@ -340,11 +373,12 @@ namespace DashboardHost.Core
                     if (frame == null) continue;
 
                     var remote = result.RemoteEndPoint;
+                    string ipStr = remote.Address.ToString();
+                    _lastKnownUdpEndpoints[ipStr] = remote;
 
                     switch (frame.Type)
                     {
                         case ProtocolConst.TypePenEvent:
-                            string ipStr = remote.Address.ToString();
                             if (_peerInfo.TryGetValue(ipStr, out var devInfo) && _deviceManager.IsAuthorized(devInfo.DeviceId))
                             {
                                 var pen = PenEventPayload.Parse(frame.Payload);
@@ -362,9 +396,18 @@ namespace DashboardHost.Core
                             break;
 
                         case ProtocolConst.TypePing:
-                            // Reply PONG with matching seq and FLAG_ACK
-                            byte[] pong = Wire.Pong(frame.Seq);
-                            await client.SendAsync(pong, pong.Length, remote);
+                            if (_peerInfo.TryGetValue(ipStr, out var pingDev) && _deviceManager.IsAuthorized(pingDev.DeviceId))
+                            {
+                                // Reply PONG with matching seq and FLAG_ACK
+                                byte[] pong = Wire.Pong(frame.Seq);
+                                await client.SendAsync(pong, pong.Length, remote);
+                            }
+                            else
+                            {
+                                // Revoked or unauthorized device — reject ping and disconnect
+                                byte[] bye = Wire.Bye(NextSeq());
+                                await client.SendAsync(bye, bye.Length, remote);
+                            }
                             break;
 
                         case ProtocolConst.TypeBye:
@@ -408,16 +451,19 @@ namespace DashboardHost.Core
 
         private async Task HandleTcpClientAsync(TcpClient client, CancellationToken token)
         {
+            string usbIp = "usb";
+            string currentDeviceId = "";
+            _activeTcpClients[usbIp] = client;
+
             using (client)
             using (var stream = client.GetStream())
             {
-                LogMessage?.Invoke("USB Android client connected over TCP (adb reverse)!");
-                byte[] headerBuffer = new byte[ProtocolConst.HeaderSize];
-                string usbIp = "usb";
-
-                while (!token.IsCancellationRequested && client.Connected)
+                try
                 {
-                    try
+                    LogMessage?.Invoke("USB Android client connected over TCP (adb reverse)!");
+                    byte[] headerBuffer = new byte[ProtocolConst.HeaderSize];
+
+                    while (!token.IsCancellationRequested && client.Connected)
                     {
                         // Read header
                         int read = 0;
@@ -459,6 +505,8 @@ namespace DashboardHost.Core
                                 var hello = HelloPayload.Parse(payload);
                                 if (hello != null)
                                 {
+                                    currentDeviceId = hello.DeviceId;
+                                    _activeTcpClients[currentDeviceId] = client;
                                     _peerInfo[usbIp] = (hello.DeviceId, hello.Name);
                                     bool auth = _deviceManager.IsAuthorized(hello.DeviceId);
                                     byte[] ack = Wire.HelloAck(NextSeq(), auth ? ProtocolConst.AckAuthorized : ProtocolConst.AckNeedsPairing, isFinal: auth);
@@ -479,6 +527,8 @@ namespace DashboardHost.Core
                                     {
                                         _peerInfo.TryGetValue(usbIp, out var inf);
                                         string devId = inf.DeviceId ?? "usb_device";
+                                        currentDeviceId = devId;
+                                        _activeTcpClients[currentDeviceId] = client;
                                         string authMethod = (!string.IsNullOrEmpty(_deviceManager.ConfiguredPassword) && string.Equals(code, _deviceManager.ConfiguredPassword, StringComparison.Ordinal)) ? "Password" : "PIN";
                                         _deviceManager.AuthorizeDevice(devId, inf.Name ?? "USB Tablet", "USB", authMethod);
                                         byte[] ack = Wire.HelloAck(NextSeq(), ProtocolConst.AckAuthorized, isFinal: true);
@@ -497,6 +547,8 @@ namespace DashboardHost.Core
                                     {
                                         _peerInfo.TryGetValue(usbIp, out var inf);
                                         string devId = inf.DeviceId ?? "usb_device";
+                                        currentDeviceId = devId;
+                                        _activeTcpClients[currentDeviceId] = client;
                                         _deviceManager.AuthorizeDevice(devId, inf.Name ?? "USB Tablet", "USB", "Google");
                                         byte[] ack = Wire.HelloAck(NextSeq(), ProtocolConst.AckAuthorized, isFinal: true);
                                         await stream.WriteAsync(ack, 0, ack.Length, token);
@@ -526,20 +578,38 @@ namespace DashboardHost.Core
                                 break;
 
                             case ProtocolConst.TypePing:
-                                byte[] pong = Wire.Pong(seq);
-                                await stream.WriteAsync(pong, 0, pong.Length, token);
-                                await stream.FlushAsync(token);
+                                _peerInfo.TryGetValue(usbIp, out var usbPingDev);
+                                if (usbPingDev.DeviceId != null && _deviceManager.IsAuthorized(usbPingDev.DeviceId))
+                                {
+                                    byte[] pong = Wire.Pong(seq);
+                                    await stream.WriteAsync(pong, 0, pong.Length, token);
+                                    await stream.FlushAsync(token);
+                                }
+                                else
+                                {
+                                    byte[] bye = Wire.Bye(NextSeq());
+                                    await stream.WriteAsync(bye, 0, bye.Length, token);
+                                    await stream.FlushAsync(token);
+                                    return;
+                                }
                                 break;
 
                             case ProtocolConst.TypeBye:
                                 return;
                         }
                     }
-                    catch (OperationCanceledException) { break; }
-                    catch (Exception ex)
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"TCP stream error: {ex.Message}");
+                }
+                finally
+                {
+                    _activeTcpClients.TryRemove(usbIp, out _);
+                    if (!string.IsNullOrEmpty(currentDeviceId))
                     {
-                        Debug.WriteLine($"TCP stream error: {ex.Message}");
-                        break;
+                        _activeTcpClients.TryRemove(currentDeviceId, out _);
                     }
                 }
             }

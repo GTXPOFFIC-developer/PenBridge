@@ -71,11 +71,17 @@ import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.Bolt
 
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import com.dashboard.core.SavedSession
+
 enum class Screen { Home, Draw, Settings }
 
 /**
  * Home / Connect screen: mode toggle (USB | Wi-Fi), host discovery cards,
- * manual IP fallback, Google account link and live status.
+ * persistent saved sessions, manual IP fallback, Google account link and live status.
  */
 @Composable
 fun HomeScreen(
@@ -88,12 +94,14 @@ fun HomeScreen(
     val conn = app.connection
     val state by conn.state.collectAsState()
     val hosts by conn.hosts.collectAsState()
+    val savedSessions by app.sessions.sessions.collectAsState()
     val settings by app.settings.settings.collectAsState()
     val google = app.google
 
     var manualIp by remember { mutableStateOf(settings.hostIp) }
     var pairingCode by remember { mutableStateOf("") }
     val showPairing = state is ConnState.PairingRequired
+    var autoNavigated by rememberSaveable { mutableStateOf(false) }
 
     // Auto-start connection on launch to remember old sessions / discover host
     LaunchedEffect(Unit) {
@@ -102,11 +110,31 @@ fun HomeScreen(
         }
     }
 
-    // Auto-open drawing / trackpad screen as soon as connected!
+    // Auto-open drawing screen only on fresh connection transition (never trap the user on Home)
     LaunchedEffect(state) {
-        if (state is ConnState.Connected) {
+        if (state is ConnState.Connected && !autoNavigated) {
+            autoNavigated = true
             onOpenDraw()
+        } else if (state !is ConnState.Connected) {
+            autoNavigated = false
         }
+    }
+
+    // Host session revocation notification
+    if (state is ConnState.Revoked) {
+        AlertDialog(
+            onDismissRequest = { conn.resetState() },
+            title = { Text("Session Revoked") },
+            text = { Text("The host '${(state as ConnState.Revoked).hostName}' has revoked this tablet's authorization. Please pair again.") },
+            confirmButton = {
+                TextButton(onClick = { conn.resetState() }) {
+                    Text("OK", color = accentPair(0).first, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = Ink.surface,
+            titleContentColor = Color.White,
+            textContentColor = Ink.muted,
+        )
     }
 
     GradientBackdrop {
@@ -134,6 +162,35 @@ fun HomeScreen(
                 StatusChip(state)
                 Spacer(Modifier.height(18.dp))
 
+                // Active Connected Banner
+                if (state is ConnState.Connected) {
+                    val h = (state as ConnState.Connected).host
+                    GlassCard {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Connected: ${h.name}", style = MaterialTheme.typography.titleMedium, color = Ink.success)
+                                Text("${h.ip} · Virtual Digitizer active", style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                TextButton(onClick = { conn.stop() }) {
+                                    Text("Disconnect", color = Ink.muted)
+                                }
+                                Button(
+                                    onClick = onOpenDraw,
+                                    colors = ButtonDefaults.buttonColors(containerColor = accentPair(0).first)
+                                ) {
+                                    Text("Open Canvas")
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(18.dp))
+                }
+
                 // Mode toggle -------------------------------------------------
                 ModeToggle(
                     current = settings.mode,
@@ -144,6 +201,17 @@ fun HomeScreen(
                 )
 
                 Spacer(Modifier.height(18.dp))
+
+                // Previous Sessions Panel
+                if (savedSessions.isNotEmpty()) {
+                    SavedSessionsPanel(
+                        sessions = savedSessions,
+                        currentState = state,
+                        onConnect = { s -> conn.connectToSession(s) },
+                        onRemove = { id -> app.sessions.removeSession(id) }
+                    )
+                    Spacer(Modifier.height(18.dp))
+                }
 
                 when (settings.mode) {
                     ConnectMode.WIFI -> WifiPanel(
@@ -500,3 +568,93 @@ internal fun txtColors() = OutlinedTextFieldDefaults.colors(
     unfocusedPlaceholderColor = Ink.muted.copy(alpha = 0.6f),
     cursorColor = accentPair(0).first,
 )
+
+@Composable
+private fun SavedSessionsPanel(
+    sessions: List<SavedSession>,
+    currentState: ConnState,
+    onConnect: (SavedSession) -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    GlassCard {
+        Column {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.History, "History", tint = accentPair(0).first, modifier = Modifier.size(18.dp))
+                    Column {
+                        Text("Saved Sessions", style = MaterialTheme.typography.titleMedium)
+                        Text("Previously paired & connected hosts", color = Ink.muted, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            sessions.forEach { s ->
+                val isConnected = currentState is ConnState.Connected && (currentState.host.ip == s.ip || (s.ip == "usb" && currentState.host.ip == "usb"))
+                SavedSessionRow(
+                    session = s,
+                    isConnected = isConnected,
+                    onConnect = { onConnect(s) },
+                    onRemove = { onRemove(s.id) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SavedSessionRow(
+    session: SavedSession,
+    isConnected: Boolean,
+    onConnect: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val (c0, _) = accentPair(0)
+    val bg = if (isConnected) c0.copy(alpha = 0.12f) else Ink.surface.copy(alpha = 0.5f)
+    val stroke = if (isConnected) c0 else Ink.stroke
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = bg,
+        border = BorderStroke(1.dp, stroke),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(
+                    if (session.mode == ConnectMode.USB) Icons.Default.Usb else Icons.Default.Wifi,
+                    null,
+                    tint = if (isConnected) c0 else Ink.muted,
+                    modifier = Modifier.size(20.dp)
+                )
+                Column {
+                    Text(session.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${session.ip} · ${if (session.isPaired) "Paired" else "Unpaired"}",
+                        color = Ink.muted,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isConnected) {
+                    Text("Connected", color = Ink.success, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                } else {
+                    TextButton(onClick = onConnect) {
+                        Text("Connect", color = c0, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Delete, "Remove", tint = Ink.muted.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}

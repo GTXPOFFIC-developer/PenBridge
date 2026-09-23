@@ -58,6 +58,9 @@ import com.dashboard.core.PenSurfaceView
 import com.dashboard.ui.theme.Ink
 import com.dashboard.ui.theme.accentPair
 
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Home
+
 /**
  * Fullscreen drawing surface. The pen-capable [PenSurfaceView] streams raw
  * normalized samples to the PC through the connection manager; Compose only
@@ -65,7 +68,11 @@ import com.dashboard.ui.theme.accentPair
  * collapsible toolbar on top.
  */
 @Composable
-fun DrawingScreen(app: DashboardApp, onExit: () -> Unit) {
+fun DrawingScreen(
+    app: DashboardApp,
+    onExit: () -> Unit,
+    onOpenSettings: () -> Unit = {},
+) {
     val conn = app.connection
     val context = LocalContext.current
     val state by conn.state.collectAsState()
@@ -137,6 +144,7 @@ fun DrawingScreen(app: DashboardApp, onExit: () -> Unit) {
             accent = c0,
             onToggleExpand = { expanded = !expanded },
             onExit = onExit,
+            onOpenSettings = onOpenSettings,
             inputMode = settings.inputMode,
             onToggleMode = {
                 val nextMode = if (settings.inputMode == InputMode.TRACKPAD)
@@ -184,6 +192,7 @@ private fun Toolbar(
     accent: Color,
     onToggleExpand: () -> Unit,
     onExit: () -> Unit,
+    onOpenSettings: () -> Unit,
     inputMode: InputMode,
     onToggleMode: () -> Unit,
     finger: Boolean,
@@ -209,7 +218,8 @@ private fun Toolbar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                IconButton(onClick = onExit) { Icon(Icons.Default.ArrowBack, "Exit", tint = Ink.muted) }
+                IconButton(onClick = onExit) { Icon(Icons.Default.ArrowBack, "Menu", tint = Ink.muted) }
+                IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, "Settings", tint = Ink.muted) }
                 val isTrackpad = inputMode == InputMode.TRACKPAD
                 ToggleChip(if (isTrackpad) "🖱️ Trackpad" else "✏️ Tablet", true, accent, onToggleMode)
                 ToggleChip("Finger", finger, accent, onFinger)

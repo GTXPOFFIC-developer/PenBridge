@@ -1,4 +1,4 @@
-﻿package com.dashboard.ui.components
+package com.dashboard.ui.components
 
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -149,6 +149,7 @@ fun StatusChip(state: ConnState) {
         is ConnState.Connecting -> "Connecting…" to Ink.warn
         is ConnState.PairingRequired -> "Pairing required" to Ink.warn
         is ConnState.Connected -> "Connected · ${state.latencyMs} ms" to Ink.success
+        is ConnState.Revoked -> "Revoked by host" to Ink.danger
     }
     Row(
         Modifier
