@@ -104,6 +104,9 @@ fun SettingsScreen(app: DashboardApp, onBack: () -> Unit) {
                 SwitchRow("Pen Trail", settingsState.penTrail) { commit(settingsState.copy(penTrail = it)) }
                 Text("Real-time visual ink trail under the stylus tip on tablet", color = Ink.muted, style = MaterialTheme.typography.labelSmall)
                 Spacer(Modifier.height(4.dp))
+                SwitchRow("Hover Trail", settingsState.hoverTrail) { commit(settingsState.copy(hoverTrail = it)) }
+                Text("Show glowing pen trail even while hovering above the screen", color = Ink.muted, style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.height(4.dp))
                 SwitchRow("Raw Input / OSU! Mode", settingsState.rawInputMode) { commit(settingsState.copy(rawInputMode = it)) }
                 Text("Unfiltered 240Hz+ digitizer stream with zero lag for rhythm games", color = Ink.muted, style = MaterialTheme.typography.labelSmall)
             }

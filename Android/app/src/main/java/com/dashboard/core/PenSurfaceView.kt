@@ -66,12 +66,28 @@ class PenSurfaceView(
     // Pen Trail rendering state
     private data class TrailPoint(val x: Float, val y: Float, val time: Long, val pressure: Int)
     private val trailPoints = ConcurrentLinkedQueue<TrailPoint>()
-    private val trailPaint = Paint().apply {
+
+    private val trailGlowPaint = Paint().apply {
         isAntiAlias = true
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
+    private val trailCorePaint = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val trailFillPaint = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.FILL
+    }
+
+    // Hover cursor tracking state
+    private var hoverX = -1f
+    private var hoverY = -1f
+    private var hoverTime = 0L
 
     // Trackpad relative tracking state
     private var lastTouchX = -1f
@@ -99,36 +115,109 @@ class PenSurfaceView(
         if (!penTrailEnabled) return
         val now = System.currentTimeMillis()
         trailPoints.add(TrailPoint(x, y, now, pressure))
+        invalidate()
         postInvalidateOnAnimation()
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        if (!penTrailEnabled || trailPoints.isEmpty()) return
+        if (!penTrailEnabled) return
 
         val now = System.currentTimeMillis()
-        // Prune trail points older than 450ms
-        while (trailPoints.peek()?.let { now - it.time > 450 } == true) {
-            trailPoints.poll()
-        }
-
-        val points = trailPoints.toList()
-        if (points.size < 2) return
+        val trailLifespanMs = 650L
+        val density = resources.displayMetrics.density.coerceAtLeast(1f)
+        val baseColor = (if (trailColor != 0) trailColor else 0xFF8B5CF6.toInt()) or 0xFF000000.toInt()
 
         var hasActive = false
-        for (i in 1 until points.size) {
-            val p0 = points[i - 1]
-            val p1 = points[i]
-            val age = now - p1.time
-            if (age > 450) continue
-            hasActive = true
-            val alpha = ((1f - age / 450f) * 210).toInt().coerceIn(0, 255)
-            val strokeW = 4f + (p1.pressure / 65535f) * 12f
 
-            trailPaint.color = trailColor
-            trailPaint.alpha = alpha
-            trailPaint.strokeWidth = strokeW
-            canvas.drawLine(p0.x, p0.y, p1.x, p1.y, trailPaint)
+        // 1. Draw hover reticle under stylus tip if pen is hovering above screen
+        if (!penDown && hoverX >= 0f && hoverY >= 0f && (now - hoverTime < 300)) {
+            val hAge = now - hoverTime
+            val hFrac = (1f - hAge.toFloat() / 300f).coerceIn(0f, 1f)
+            val hAlpha = (hFrac * 190f).toInt().coerceIn(0, 255)
+            val hRadius = 5.5f * density
+
+            trailFillPaint.color = baseColor
+            trailFillPaint.alpha = (hAlpha * 0.35f).toInt()
+            canvas.drawCircle(hoverX, hoverY, hRadius * 2.2f, trailFillPaint)
+
+            trailCorePaint.color = baseColor
+            trailCorePaint.alpha = hAlpha
+            trailCorePaint.strokeWidth = 1.75f * density
+            canvas.drawCircle(hoverX, hoverY, hRadius, trailCorePaint)
+            hasActive = true
+        }
+
+        // 2. Render pen trail strokes and points
+        if (trailPoints.isNotEmpty()) {
+            // Prune trail points older than trailLifespanMs
+            while (trailPoints.peek()?.let { now - it.time > trailLifespanMs } == true) {
+                trailPoints.poll()
+            }
+
+            val points = trailPoints.toList()
+            if (points.isNotEmpty()) {
+                if (points.size == 1) {
+                    val p = points[0]
+                    val age = now - p.time
+                    if (age <= trailLifespanMs) {
+                        hasActive = true
+                        val frac = (1f - age.toFloat() / trailLifespanMs).coerceIn(0f, 1f)
+                        val alpha = (frac * 240f).toInt().coerceIn(0, 255)
+                        val radius = (3.5f + (p.pressure / 65535f) * 6.5f) * density
+
+                        // Outer glow
+                        trailFillPaint.color = baseColor
+                        trailFillPaint.alpha = (alpha * 0.38f).toInt()
+                        canvas.drawCircle(p.x, p.y, radius * 2.2f, trailFillPaint)
+
+                        // Core dot
+                        trailFillPaint.alpha = alpha
+                        canvas.drawCircle(p.x, p.y, radius, trailFillPaint)
+                    }
+                } else {
+                    // Draw dual-layer continuous stroke (outer neon glow + high-vibrancy core)
+                    for (i in 1 until points.size) {
+                        val p0 = points[i - 1]
+                        val p1 = points[i]
+                        val age = now - p1.time
+                        if (age > trailLifespanMs) continue
+                        hasActive = true
+                        val frac = (1f - age.toFloat() / trailLifespanMs).coerceIn(0f, 1f)
+                        val alpha = (frac * 240f).toInt().coerceIn(0, 255)
+                        val strokeW = (3.5f + (p1.pressure / 65535f) * 8.5f) * density
+
+                        // Glow layer
+                        trailGlowPaint.color = baseColor
+                        trailGlowPaint.alpha = (alpha * 0.35f).toInt()
+                        trailGlowPaint.strokeWidth = strokeW * 2.2f
+                        canvas.drawLine(p0.x, p0.y, p1.x, p1.y, trailGlowPaint)
+
+                        // Core layer
+                        trailCorePaint.color = baseColor
+                        trailCorePaint.alpha = alpha
+                        trailCorePaint.strokeWidth = strokeW
+                        canvas.drawLine(p0.x, p0.y, p1.x, p1.y, trailCorePaint)
+                    }
+
+                    // Draw crisp cursor nib at the leading point
+                    val latest = points.last()
+                    val latestAge = now - latest.time
+                    if (latestAge <= trailLifespanMs) {
+                        val frac = (1f - latestAge.toFloat() / trailLifespanMs).coerceIn(0f, 1f)
+                        val alpha = (frac * 255f).toInt().coerceIn(0, 255)
+                        val nibRadius = (4f + (latest.pressure / 65535f) * 6f) * density
+
+                        trailFillPaint.color = baseColor
+                        trailFillPaint.alpha = (alpha * 0.4f).toInt()
+                        canvas.drawCircle(latest.x, latest.y, nibRadius * 2.0f, trailFillPaint)
+
+                        trailFillPaint.color = 0xFFFFFFFF.toInt()
+                        trailFillPaint.alpha = alpha
+                        canvas.drawCircle(latest.x, latest.y, nibRadius * 0.65f, trailFillPaint)
+                    }
+                }
+            }
         }
 
         if (hasActive) {
@@ -149,6 +238,12 @@ class PenSurfaceView(
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if (penDown) return false
         val action = event.actionMasked
+        if (action == MotionEvent.ACTION_HOVER_EXIT) {
+            hoverX = -1f
+            hoverY = -1f
+            invalidate()
+            return true
+        }
         if (action == MotionEvent.ACTION_HOVER_MOVE ||
             action == MotionEvent.ACTION_HOVER_ENTER
         ) {
@@ -170,8 +265,14 @@ class PenSurfaceView(
             p.contact = false
             fill(p, event, idx, px, py)
 
+            hoverX = px
+            hoverY = py
+            hoverTime = System.currentTimeMillis()
+
             if (penTrailEnabled && hoverTrailEnabled) {
                 addTrailPoint(px, py, 0)
+            } else if (penTrailEnabled) {
+                invalidate()
             }
 
             onSample(p)
@@ -331,6 +432,8 @@ class PenSurfaceView(
             MotionEvent.ACTION_DOWN -> {
                 val idx = event.actionIndex
                 if (!toolAccepted(event.getToolType(idx))) return
+                hoverX = -1f
+                hoverY = -1f
                 activePointerId = event.getPointerId(idx)
                 penDown = true
                 if (!contactSent) { onContactChanged(true); contactSent = true }
@@ -351,6 +454,8 @@ class PenSurfaceView(
                 val tool = event.getToolType(idx)
                 // If active stylus touches while palm or fingers are present, prioritize stylus
                 if (tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER) {
+                    hoverX = -1f
+                    hoverY = -1f
                     activePointerId = event.getPointerId(idx)
                     penDown = true
                     if (!contactSent) { onContactChanged(true); contactSent = true }

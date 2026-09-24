@@ -212,6 +212,21 @@ namespace DashboardHost.Core
                     Debug.WriteLine("Synthetic pen device creation failed. Falling back to mouse input.");
                     _useSyntheticPen = false;
                 }
+                else
+                {
+                    // Probe if synthetic pen injection is permitted without uiAccess elevation
+                    var probe = new POINTER_TYPE_INFO[1];
+                    probe[0].type = POINTER_INPUT_TYPE.PT_PEN;
+                    probe[0].penInfo.pointerInfo.pointerType = POINTER_INPUT_TYPE.PT_PEN;
+                    probe[0].penInfo.pointerInfo.pointerId = 1;
+                    probe[0].penInfo.pointerInfo.pointerFlags = POINTER_FLAGS.POINTER_FLAG_UPDATE | POINTER_FLAGS.POINTER_FLAG_INRANGE;
+                    bool canInject = InjectSyntheticPointerInput(_syntheticPenDevice, probe, 1);
+                    if (!canInject)
+                    {
+                        Debug.WriteLine("Synthetic pen lacks UI access. Using Universal Direct Mouse Injection for 100% drawing compatibility.");
+                        _useSyntheticPen = false;
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -293,13 +308,14 @@ namespace DashboardHost.Core
 
         private void InjectPen(PenEventPayload evt, int x, int y, uint pressure, int tiltX, int tiltY)
         {
-            // BUG-FIX: Do NOT call SetCursorPos while the pen is in contact or updating!
-            // Simultaneous SetCursorPos generates mouse messages that fight the pen pointer,
-            // causing cursor jumping and fluctuating position on click.
-            if (!_syntheticPenInContact && evt.Action == ProtocolConst.ActionHover)
+            if (!_useSyntheticPen || _syntheticPenDevice == IntPtr.Zero)
             {
-                SetCursorPos(x, y);
+                InjectMouse(evt, x, y);
+                return;
             }
+
+            // Always update Windows system cursor position so all desktop apps (OpenBoard, Studio, Krita, Paint) receive continuous strokes
+            SetCursorPos(x, y);
 
             var pointerInfo = new POINTER_TYPE_INFO
             {
@@ -386,8 +402,8 @@ namespace DashboardHost.Core
 
         private void InjectMouse(PenEventPayload evt, int x, int y)
         {
-            // Always move cursor to target position
-            SendAbsoluteMouse(0, x, y);
+            // Position cursor on screen for all applications (OpenBoard, Studio, Krita, Photoshop, Paint, etc.)
+            SetCursorPos(x, y);
 
             if (evt.Barrel || evt.Middle || evt.DoubleClick || evt.Undo)
             {
@@ -397,17 +413,30 @@ namespace DashboardHost.Core
 
             if (evt.Action == ProtocolConst.ActionDown || (evt.Contact && !_mouseInContact))
             {
-                SendAbsoluteMouse(MOUSEEVENTF_LEFTDOWN, x, y);
+                mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
                 _mouseInContact = true;
+            }
+            else if (evt.Action == ProtocolConst.ActionMove && evt.Contact)
+            {
+                if (!_mouseInContact)
+                {
+                    mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+                    _mouseInContact = true;
+                }
+                else
+                {
+                    // Drag movement while contact is maintained: generates smooth, continuous stroke
+                    mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, UIntPtr.Zero);
+                }
             }
             else if (evt.Action == ProtocolConst.ActionUp || (!evt.Contact && _mouseInContact))
             {
-                SendAbsoluteMouse(MOUSEEVENTF_LEFTUP, x, y);
+                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
                 _mouseInContact = false;
             }
             else if (evt.Action == ProtocolConst.ActionHover && _mouseInContact)
             {
-                SendAbsoluteMouse(MOUSEEVENTF_LEFTUP, x, y);
+                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
                 _mouseInContact = false;
             }
         }

@@ -57,6 +57,7 @@ import com.dashboard.core.InputMode
 import com.dashboard.core.PenSurfaceView
 import com.dashboard.ui.theme.Ink
 import com.dashboard.ui.theme.accentPair
+import androidx.compose.ui.graphics.toArgb
 
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Home
@@ -137,12 +138,7 @@ fun DrawingScreen(
                 view.barrelAction = settings.barrelAction
                 view.penTrailEnabled = settings.penTrail
                 view.hoverTrailEnabled = settings.hoverTrail
-                view.trailColor = android.graphics.Color.argb(
-                    (c0.alpha * 255).toInt(),
-                    (c0.red * 255).toInt(),
-                    (c0.green * 255).toInt(),
-                    (c0.blue * 255).toInt(),
-                )
+                view.trailColor = c0.toArgb() or 0xFF000000.toInt()
                 view.regionActive = settings.mappingMode == com.dashboard.core.MappingMode.CUSTOM
                 view.regionX0 = settings.regionX0
                 view.regionY0 = settings.regionY0
