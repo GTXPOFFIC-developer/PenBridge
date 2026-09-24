@@ -149,8 +149,18 @@ fun HomeScreen(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         AnimatedLogo(52.dp)
                         Column {
-                            Text("PenBridge", style = MaterialTheme.typography.headlineMedium)
-                            Text("Tablet → Virtual Digitizer", color = Ink.muted, style = MaterialTheme.typography.labelMedium)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("PenBridge", style = MaterialTheme.typography.headlineMedium)
+                                Box(
+                                    Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color(0xFF10B981).copy(alpha = 0.2f))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("PRO", color = Color(0xFF10B981), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Text("Tablet → Virtual Digitizer · 100% Free & Ad-Free", color = Ink.muted, style = MaterialTheme.typography.labelMedium)
                         }
                     }
                     IconButton(onClick = onOpenSettings) {

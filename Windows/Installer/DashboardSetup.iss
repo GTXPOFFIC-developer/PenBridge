@@ -2,7 +2,7 @@
 ; Dashboard Windows Host Installer
 
 #define MyAppName "Dashboard Host"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.3.0"
 #define MyAppPublisher "Dashboard"
 #define MyAppExeName "DashboardHost.exe"
 

@@ -11,6 +11,10 @@ namespace DashboardHost.Core
         public bool MinimizeToTray { get; set; } = true;
         public bool AutoStartServer { get; set; } = true;
         public MappingTarget MappingTarget { get; set; } = MappingTarget.PrimaryScreen;
+        public int SelectedMonitorIndex { get; set; } = 0;
+        public bool PreserveAspectRatio { get; set; } = false;
+        public BarrelActionType BarrelAction { get; set; } = BarrelActionType.RightClick;
+        public bool RawInputMode { get; set; } = false;
         public int AccentIndex { get; set; } = 0;
     }
 

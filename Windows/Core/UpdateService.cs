@@ -16,7 +16,7 @@ namespace DashboardHost.Core
         private const string RepoName = "PenBridge";
         private readonly HttpClient _http;
 
-        public static string CurrentVersion => "1.2.0";
+        public static string CurrentVersion => "1.3.0";
 
         public event Action<string>? LogMessage;
         public event Action<bool, string?, string?>? UpdateChecked; // (hasUpdate, latestVersion, downloadUrl)

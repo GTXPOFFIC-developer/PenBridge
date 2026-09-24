@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Forms;
 
 namespace DashboardHost.Core
 {
@@ -9,7 +10,17 @@ namespace DashboardHost.Core
     {
         PrimaryScreen,
         VirtualScreen,
+        SpecificMonitor,
         CustomRegion
+    }
+
+    public enum BarrelActionType
+    {
+        RightClick,
+        MiddleClick,
+        Eraser,
+        DoubleClick,
+        Undo
     }
 
     public sealed class InputInjector : IDisposable
@@ -137,6 +148,9 @@ namespace DashboardHost.Core
         private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
 
         [DllImport("user32.dll")]
+        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+        [DllImport("user32.dll")]
         private static extern int GetSystemMetrics(int nIndex);
 
         private const int SM_XVIRTUALSCREEN = 76;
@@ -151,7 +165,15 @@ namespace DashboardHost.Core
         private const uint MOUSEEVENTF_LEFTUP = 0x0004;
         private const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
         private const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+        private const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
+        private const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
         private const uint MOUSEEVENTF_WHEEL = 0x0800;
+        private const uint MOUSEEVENTF_VIRTUALDESK = 0x4000;
+        private const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
+
+        private const uint KEYEVENTF_KEYUP = 0x0002;
+        private const byte VK_CONTROL = 0x11;
+        private const byte VK_Z = 0x5A;
 
         #endregion
 
@@ -162,7 +184,12 @@ namespace DashboardHost.Core
         private bool _disposed = false;
 
         public MappingTarget Target { get; set; } = MappingTarget.PrimaryScreen;
+        public int SelectedMonitorIndex { get; set; } = 0;
+        public bool PreserveAspectRatio { get; set; } = false;
         public Rect CustomRegion { get; set; } = Rect.Empty;
+
+        public BarrelActionType ConfiguredBarrelAction { get; set; } = BarrelActionType.RightClick;
+        public bool RawInputMode { get; set; } = false;
 
         public event Action<int, int, int, bool, int, int>? PenSampleReceived;
 
@@ -217,13 +244,14 @@ namespace DashboardHost.Core
 
             PenSampleReceived?.Invoke(screenX, screenY, (int)pressure1024, evt.Contact, tiltXDeg, tiltYDeg);
 
-            if (_useSyntheticPen && _syntheticPenDevice != IntPtr.Zero)
+            // In Raw Input / OSU! Mode, or if synthetic pen is unavailable: inject high-precision absolute mouse events
+            if (RawInputMode || !_useSyntheticPen || _syntheticPenDevice == IntPtr.Zero)
             {
-                InjectPen(evt, screenX, screenY, pressure1024, tiltXDeg, tiltYDeg);
+                InjectMouse(evt, screenX, screenY);
             }
             else
             {
-                InjectMouse(evt, screenX, screenY);
+                InjectPen(evt, screenX, screenY, pressure1024, tiltXDeg, tiltYDeg);
             }
         }
 
@@ -245,10 +273,9 @@ namespace DashboardHost.Core
                 mouse_event(MOUSEEVENTF_MOVE, unchecked((uint)dx), unchecked((uint)dy), 0, UIntPtr.Zero);
             }
 
-            if (evt.Barrel)
+            if (evt.Barrel || evt.Middle || evt.DoubleClick || evt.Undo)
             {
-                // Right click
-                mouse_event(MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
+                ExecuteBarrelAction(evt, 0, 0, isRelative: true);
                 return;
             }
 
@@ -266,8 +293,13 @@ namespace DashboardHost.Core
 
         private void InjectPen(PenEventPayload evt, int x, int y, uint pressure, int tiltX, int tiltY)
         {
-            // Update the Windows system cursor position so the pointer is visible system-wide
-            SetCursorPos(x, y);
+            // BUG-FIX: Do NOT call SetCursorPos while the pen is in contact or updating!
+            // Simultaneous SetCursorPos generates mouse messages that fight the pen pointer,
+            // causing cursor jumping and fluctuating position on click.
+            if (!_syntheticPenInContact && evt.Action == ProtocolConst.ActionHover)
+            {
+                SetCursorPos(x, y);
+            }
 
             var pointerInfo = new POINTER_TYPE_INFO
             {
@@ -347,36 +379,115 @@ namespace DashboardHost.Core
             {
                 // Fall back to mouse injection permanently for this session if synthetic pen input lacks privileges
                 _useSyntheticPen = false;
-                Debug.WriteLine("InjectSyntheticPointerInput failed. Falling back to mouse event injection.");
+                Debug.WriteLine("InjectSyntheticPointerInput failed. Falling back to high-precision mouse injection.");
                 InjectMouse(evt, x, y);
             }
         }
 
         private void InjectMouse(PenEventPayload evt, int x, int y)
         {
-            SetCursorPos(x, y);
+            // Always move cursor to target position
+            SendAbsoluteMouse(0, x, y);
 
-            if (evt.Barrel)
+            if (evt.Barrel || evt.Middle || evt.DoubleClick || evt.Undo)
             {
-                mouse_event(MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
+                ExecuteBarrelAction(evt, x, y, isRelative: false);
                 return;
             }
 
             if (evt.Action == ProtocolConst.ActionDown || (evt.Contact && !_mouseInContact))
             {
-                mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+                SendAbsoluteMouse(MOUSEEVENTF_LEFTDOWN, x, y);
                 _mouseInContact = true;
             }
             else if (evt.Action == ProtocolConst.ActionUp || (!evt.Contact && _mouseInContact))
             {
-                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                SendAbsoluteMouse(MOUSEEVENTF_LEFTUP, x, y);
                 _mouseInContact = false;
             }
             else if (evt.Action == ProtocolConst.ActionHover && _mouseInContact)
             {
-                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                SendAbsoluteMouse(MOUSEEVENTF_LEFTUP, x, y);
                 _mouseInContact = false;
             }
+        }
+
+        private void ExecuteBarrelAction(PenEventPayload evt, int x, int y, bool isRelative)
+        {
+            var action = ConfiguredBarrelAction;
+            if (evt.Undo) action = BarrelActionType.Undo;
+            else if (evt.DoubleClick) action = BarrelActionType.DoubleClick;
+            else if (evt.Middle) action = BarrelActionType.MiddleClick;
+            else if (evt.Eraser) action = BarrelActionType.Eraser;
+
+            switch (action)
+            {
+                case BarrelActionType.Undo:
+                    keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
+                    keybd_event(VK_Z, 0, 0, UIntPtr.Zero);
+                    keybd_event(VK_Z, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    break;
+
+                case BarrelActionType.DoubleClick:
+                    if (isRelative)
+                    {
+                        mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                        mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                    }
+                    else
+                    {
+                        SendAbsoluteMouse(MOUSEEVENTF_LEFTDOWN, x, y);
+                        SendAbsoluteMouse(MOUSEEVENTF_LEFTUP, x, y);
+                        SendAbsoluteMouse(MOUSEEVENTF_LEFTDOWN, x, y);
+                        SendAbsoluteMouse(MOUSEEVENTF_LEFTUP, x, y);
+                    }
+                    break;
+
+                case BarrelActionType.MiddleClick:
+                    if (isRelative)
+                    {
+                        mouse_event(MOUSEEVENTF_MIDDLEDOWN | MOUSEEVENTF_MIDDLEUP, 0, 0, 0, UIntPtr.Zero);
+                    }
+                    else
+                    {
+                        SendAbsoluteMouse(MOUSEEVENTF_MIDDLEDOWN, x, y);
+                        SendAbsoluteMouse(MOUSEEVENTF_MIDDLEUP, x, y);
+                    }
+                    break;
+
+                case BarrelActionType.Eraser:
+                case BarrelActionType.RightClick:
+                default:
+                    if (isRelative)
+                    {
+                        mouse_event(MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_RIGHTUP, 0, 0, 0, UIntPtr.Zero);
+                    }
+                    else
+                    {
+                        SendAbsoluteMouse(MOUSEEVENTF_RIGHTDOWN, x, y);
+                        SendAbsoluteMouse(MOUSEEVENTF_RIGHTUP, x, y);
+                    }
+                    break;
+            }
+        }
+
+        private void SendAbsoluteMouse(uint flags, int screenX, int screenY)
+        {
+            int vLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            int vTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            int vWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+            int vHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+            if (vWidth <= 0) vWidth = GetSystemMetrics(SM_CXSCREEN);
+            if (vHeight <= 0) vHeight = GetSystemMetrics(SM_CYSCREEN);
+            if (vWidth <= 0) vWidth = 1920;
+            if (vHeight <= 0) vHeight = 1080;
+
+            uint normX = (uint)Math.Clamp((int)(((screenX - vLeft) * 65535.0 / vWidth) + 0.5), 0, 65535);
+            uint normY = (uint)Math.Clamp((int)(((screenY - vTop) * 65535.0 / vHeight) + 0.5), 0, 65535);
+
+            mouse_event(flags | MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, normX, normY, 0, UIntPtr.Zero);
         }
 
         private (int x, int y) MapCoordinates(ushort xNorm, ushort yNorm)
@@ -390,6 +501,22 @@ namespace DashboardHost.Core
                     originY = GetSystemMetrics(SM_YVIRTUALSCREEN);
                     width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
                     height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+                    break;
+
+                case MappingTarget.SpecificMonitor:
+                    var screens = Screen.AllScreens;
+                    if (screens != null && SelectedMonitorIndex >= 0 && SelectedMonitorIndex < screens.Length)
+                    {
+                        var sc = screens[SelectedMonitorIndex];
+                        originX = sc.Bounds.X;
+                        originY = sc.Bounds.Y;
+                        width = sc.Bounds.Width;
+                        height = sc.Bounds.Height;
+                    }
+                    else
+                    {
+                        goto case MappingTarget.PrimaryScreen;
+                    }
                     break;
 
                 case MappingTarget.CustomRegion:
@@ -410,6 +537,31 @@ namespace DashboardHost.Core
                     width = GetSystemMetrics(SM_CXSCREEN);
                     height = GetSystemMetrics(SM_CYSCREEN);
                     break;
+            }
+
+            if (width <= 0) width = 1920;
+            if (height <= 0) height = 1080;
+
+            if (PreserveAspectRatio)
+            {
+                // Tablet surface is assumed 16:10 or 16:9; adjust target rect proportionally
+                double targetAspect = (double)width / height;
+                double tabletAspect = 16.0 / 10.0;
+
+                if (targetAspect > tabletAspect)
+                {
+                    // Pillarbox: target is wider than tablet
+                    int adjustedWidth = (int)(height * tabletAspect);
+                    originX += (width - adjustedWidth) / 2;
+                    width = adjustedWidth;
+                }
+                else if (targetAspect < tabletAspect)
+                {
+                    // Letterbox: target is taller than tablet
+                    int adjustedHeight = (int)(width / tabletAspect);
+                    originY += (height - adjustedHeight) / 2;
+                    height = adjustedHeight;
+                }
             }
 
             int mappedX = originX + (int)((xNorm / 65535.0) * width);

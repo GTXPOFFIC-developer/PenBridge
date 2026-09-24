@@ -130,8 +130,24 @@ fun DrawingScreen(
                 view.sensitivity = settings.trackpadSensitivity
                 view.fingerEnabled = settings.fingerInput
                 view.palmRejection = settings.palmRejection
+                view.stylusOnly = settings.stylusOnly
+                view.rawInputMode = settings.rawInputMode
                 view.tiltEnabled = settings.tiltEnabled
                 view.hapticsEnabled = settings.haptics
+                view.barrelAction = settings.barrelAction
+                view.penTrailEnabled = settings.penTrail
+                view.hoverTrailEnabled = settings.hoverTrail
+                view.trailColor = android.graphics.Color.argb(
+                    (c0.alpha * 255).toInt(),
+                    (c0.red * 255).toInt(),
+                    (c0.green * 255).toInt(),
+                    (c0.blue * 255).toInt(),
+                )
+                view.regionActive = settings.mappingMode == com.dashboard.core.MappingMode.CUSTOM
+                view.regionX0 = settings.regionX0
+                view.regionY0 = settings.regionY0
+                view.regionX1 = settings.regionX1
+                view.regionY1 = settings.regionY1
                 view.onHaptic = { app.vibrate(8) }
             },
             modifier = Modifier.fillMaxSize(),
@@ -159,6 +175,12 @@ fun DrawingScreen(
             onPalm = { app.settings.update { it.copy(palmRejection = it.palmRejection.not()) }; conn.pushConfig(app.settings.update { it.copy() }) },
             tilt = settings.tiltEnabled,
             onTilt = { app.settings.update { it.copy(tiltEnabled = it.tiltEnabled.not()) }; conn.pushConfig(app.settings.update { it.copy() }) },
+            stylusOnly = settings.stylusOnly,
+            onStylusOnly = { app.settings.update { it.copy(stylusOnly = !it.stylusOnly) } },
+            penTrail = settings.penTrail,
+            onPenTrail = { app.settings.update { it.copy(penTrail = !it.penTrail) } },
+            rawInput = settings.rawInputMode,
+            onRawInput = { app.settings.update { it.copy(rawInputMode = !it.rawInputMode) } },
         )
 
         // "not connected" hint --------------------------------------------------
@@ -201,6 +223,12 @@ private fun Toolbar(
     onPalm: () -> Unit,
     tilt: Boolean,
     onTilt: () -> Unit,
+    stylusOnly: Boolean,
+    onStylusOnly: () -> Unit,
+    penTrail: Boolean,
+    onPenTrail: () -> Unit,
+    rawInput: Boolean,
+    onRawInput: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         AnimatedVisibility(
@@ -222,6 +250,13 @@ private fun Toolbar(
                 IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, "Settings", tint = Ink.muted) }
                 val isTrackpad = inputMode == InputMode.TRACKPAD
                 ToggleChip(if (isTrackpad) "🖱️ Trackpad" else "✏️ Tablet", true, accent, onToggleMode)
+                ToggleChip("Stylus Only", stylusOnly, accent, onStylusOnly)
+                ToggleChip("Trail", penTrail, accent, onPenTrail)
+                if (rawInput) {
+                    ToggleChip("⚡ OSU!", true, Color(0xFFEF4444), onRawInput)
+                } else {
+                    ToggleChip("Raw/OSU", false, accent, onRawInput)
+                }
                 ToggleChip("Finger", finger, accent, onFinger)
                 ToggleChip("Palm", palm, accent, onPalm)
                 ToggleChip("Tilt", tilt, accent, onTilt)

@@ -8,10 +8,10 @@
 set -euo pipefail
 
 APP_NAME="Dashboard Host"
-APP_VERSION="1.2.0"
+APP_VERSION="1.3.0"
 BUNDLE_ID="com.dashboard.host"
 INSTALL_LOCATION="/Applications/Dashboard Host.app"
-PKG_OUTPUT="DashboardHost-macOS-1.2.0.pkg"
+PKG_OUTPUT="DashboardHost-macOS-1.3.0.pkg"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"

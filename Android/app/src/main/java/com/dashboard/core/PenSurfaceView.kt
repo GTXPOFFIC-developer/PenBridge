@@ -1,8 +1,11 @@
 package com.dashboard.core
 
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.view.MotionEvent
 import android.view.View
+import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -12,9 +15,10 @@ import kotlin.math.sin
  * A plain [View] (rather than Compose pointer APIs) so we can:
  *  - call [requestUnbufferedDispatch] so the OS streams every frame,
  *  - drain [MotionEvent.getHistorical*] batches (no points dropped),
- *  - receive raw hover events via [onGenericMotionEvent].
+ *  - receive raw hover events via [onGenericMotionEvent],
+ *  - render low-latency Pen Trail directly on the canvas.
  *
- * Every sample is normalized to the full tablet surface (0..65535) and
+ * Every sample is normalized to the full tablet surface (0..65535) or active region and
  * forwarded to [onSample] exactly as described in PROTOCOL.md.
  */
 class PenSurfaceView(
@@ -29,14 +33,45 @@ class PenSurfaceView(
     /** Drop simultaneous finger touches while a stylus is down. */
     var palmRejection: Boolean = true
 
+    /** Stylus Mode (S-Pen / Active Stylus Only): 100% ignore fingers and palm touches. */
+    var stylusOnly: Boolean = false
+
+    /** Raw Input / OSU! Mode: Unfiltered digitization with zero hover throttling for ultra-low latency. */
+    var rawInputMode: Boolean = false
+
     /** Read AXIS_TILT / AXIS_ORIENTATION and forward as tiltX/tiltY. */
     var tiltEnabled: Boolean = true
 
     /** Mode: Trackpad (relative mouse) vs Tablet (absolute digitizer). */
-    var inputMode: InputMode = InputMode.TRACKPAD
+    var inputMode: InputMode = InputMode.TABLET
     var sensitivity: Float = 1.3f
     var hapticsEnabled: Boolean = true
     var onHaptic: (() -> Unit)? = null
+
+    /** Samsung S-Pen barrel button remapping. */
+    var barrelAction: BarrelAction = BarrelAction.RIGHT_CLICK
+
+    /** Pen Trail visual feedback on tablet canvas. */
+    var penTrailEnabled: Boolean = true
+    var hoverTrailEnabled: Boolean = false
+    var trailColor: Int = 0xFF8B5CF6.toInt()
+
+    /** Drawing-Area Selection / Workspace Mapping. */
+    var regionActive: Boolean = false
+    var regionX0: Int = 0
+    var regionY0: Int = 0
+    var regionX1: Int = 65535
+    var regionY1: Int = 65535
+
+    // Pen Trail rendering state
+    private data class TrailPoint(val x: Float, val y: Float, val time: Long, val pressure: Int)
+    private val trailPoints = ConcurrentLinkedQueue<TrailPoint>()
+    private val trailPaint = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
 
     // Trackpad relative tracking state
     private var lastTouchX = -1f
@@ -52,8 +87,54 @@ class PenSurfaceView(
     private var activePointerId = -1
     private var contactSent = false
 
-    // Hover is lower priority; never drop contact events because of it.
+    // Hover timestamp for throttling in standard mode
     private var lastHoverNs = 0L
+
+    init {
+        // Ensure onDraw is called for custom pen trail rendering
+        setWillNotDraw(false)
+    }
+
+    private fun addTrailPoint(x: Float, y: Float, pressure: Int) {
+        if (!penTrailEnabled) return
+        val now = System.currentTimeMillis()
+        trailPoints.add(TrailPoint(x, y, now, pressure))
+        postInvalidateOnAnimation()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        if (!penTrailEnabled || trailPoints.isEmpty()) return
+
+        val now = System.currentTimeMillis()
+        // Prune trail points older than 450ms
+        while (trailPoints.peek()?.let { now - it.time > 450 } == true) {
+            trailPoints.poll()
+        }
+
+        val points = trailPoints.toList()
+        if (points.size < 2) return
+
+        var hasActive = false
+        for (i in 1 until points.size) {
+            val p0 = points[i - 1]
+            val p1 = points[i]
+            val age = now - p1.time
+            if (age > 450) continue
+            hasActive = true
+            val alpha = ((1f - age / 450f) * 210).toInt().coerceIn(0, 255)
+            val strokeW = 4f + (p1.pressure / 65535f) * 12f
+
+            trailPaint.color = trailColor
+            trailPaint.alpha = alpha
+            trailPaint.strokeWidth = strokeW
+            canvas.drawLine(p0.x, p0.y, p1.x, p1.y, trailPaint)
+        }
+
+        if (hasActive) {
+            postInvalidateOnAnimation()
+        }
+    }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         requestUnbufferedDispatch(event)
@@ -67,19 +148,32 @@ class PenSurfaceView(
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if (penDown) return false
-        if (event.actionMasked == MotionEvent.ACTION_HOVER_MOVE ||
-            event.actionMasked == MotionEvent.ACTION_HOVER_ENTER
+        val action = event.actionMasked
+        if (action == MotionEvent.ACTION_HOVER_MOVE ||
+            action == MotionEvent.ACTION_HOVER_ENTER
         ) {
-            // Throttle hover (fine at ~60 Hz) while contact stays unthrottled.
-            val now = event.eventTime
-            if (now - lastHoverNs < 8_000_000L && !hoversChanged(event)) return true
-            lastHoverNs = now
-            val idx = event.actionIndex
+            val idx = event.actionIndex.coerceAtLeast(0)
             if (!toolAccepted(event.getToolType(idx))) return true
-            val p = PenEvent.pool
+
+            // In Raw Input / OSU! Mode, bypass hover throttling completely
+            if (!rawInputMode) {
+                val now = event.eventTime
+                if (now - lastHoverNs < 8_000_000L && !hoversChanged(event)) return true
+                lastHoverNs = now
+            }
+
+            val px = if (idx < event.pointerCount) event.getX(idx) else event.x
+            val py = if (idx < event.pointerCount) event.getY(idx) else event.y
+
+            val p = PenEvent()
             p.action = Const.ACTION_HOVER
             p.contact = false
-            fill(p, event, idx, event.x, event.y)
+            fill(p, event, idx, px, py)
+
+            if (penTrailEnabled && hoverTrailEnabled) {
+                addTrailPoint(px, py, 0)
+            }
+
             onSample(p)
         }
         return true // keep hover captured
@@ -113,7 +207,7 @@ class PenSurfaceView(
                         pointerMoved = true
                         val scrollUnits = (dy * 6f).toInt()
                         if (scrollUnits != 0) {
-                            val p = PenEvent.pool
+                            val p = PenEvent()
                             p.action = Const.ACTION_SCROLL
                             p.relative = true
                             p.xNorm = 0
@@ -143,7 +237,7 @@ class PenSurfaceView(
 
                 if (intDx != 0 || intDy != 0) {
                     pointerMoved = true
-                    val p = PenEvent.pool
+                    val p = PenEvent()
                     p.action = Const.ACTION_MOVE
                     p.relative = true
                     p.xNorm = intDx
@@ -154,9 +248,8 @@ class PenSurfaceView(
             }
             MotionEvent.ACTION_UP -> {
                 val elapsed = System.currentTimeMillis() - downTime
-                if (!pointerMoved && elapsed < 300) {
-                    // Tap = Left Click — use separate PenEvent instances to avoid
-                    // mutation corruption when onSample is called back-to-back.
+                if (!pointerMoved && elapsed < 350) {
+                    // Tap = Left Click
                     val down = PenEvent()
                     down.action = Const.ACTION_DOWN
                     down.relative = true
@@ -187,9 +280,7 @@ class PenSurfaceView(
                 if (twoFingerScroll) {
                     val elapsed = System.currentTimeMillis() - downTime
                     if (!pointerMoved && elapsed < 350) {
-                        // Two-finger tap = Right Click.
-                        // BUG-FIX: must send both DOWN and UP; missing UP left the right
-                        // mouse button held indefinitely, causing erratic selection behaviour.
+                        // Two-finger tap = Right Click
                         val down = PenEvent()
                         down.action = Const.ACTION_DOWN
                         down.barrel = true
@@ -210,8 +301,6 @@ class PenSurfaceView(
                     }
                     twoFingerScroll = false
                     lastTwoFingerY = -1f
-                    // Resume single-finger tracking from the remaining finger so the
-                    // cursor doesn't jump on the next MOVE event.
                     val remaining = if (event.actionIndex == 0) 1 else 0
                     if (event.pointerCount > remaining) {
                         lastTouchX = event.getX(remaining)
@@ -222,7 +311,6 @@ class PenSurfaceView(
                     }
                     subpixelX = 0f
                     subpixelY = 0f
-                    // Prevent the imminent ACTION_UP from registering as a tap.
                     pointerMoved = true
                 }
             }
@@ -247,50 +335,102 @@ class PenSurfaceView(
                 penDown = true
                 if (!contactSent) { onContactChanged(true); contactSent = true }
                 if (hapticsEnabled) onHaptic?.invoke()
-                val p = PenEvent.pool
+
+                val px = event.getX(idx)
+                val py = event.getY(idx)
+
+                val p = PenEvent()
                 p.action = Const.ACTION_DOWN
                 p.contact = true
-                fill(p, event, idx, event.x, event.y)
+                fill(p, event, idx, px, py)
+                addTrailPoint(px, py, p.pressure)
                 onSample(p)
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                val idx = event.actionIndex
+                val tool = event.getToolType(idx)
+                // If active stylus touches while palm or fingers are present, prioritize stylus
+                if (tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER) {
+                    activePointerId = event.getPointerId(idx)
+                    penDown = true
+                    if (!contactSent) { onContactChanged(true); contactSent = true }
+                    if (hapticsEnabled) onHaptic?.invoke()
+
+                    val px = event.getX(idx)
+                    val py = event.getY(idx)
+
+                    val p = PenEvent()
+                    p.action = Const.ACTION_DOWN
+                    p.contact = true
+                    fill(p, event, idx, px, py)
+                    addTrailPoint(px, py, p.pressure)
+                    onSample(p)
+                }
             }
             MotionEvent.ACTION_MOVE -> {
                 if (!penDown) return
                 val idx = indexOfPointer(event, activePointerId)
                 if (idx < 0) return
-                // Historical frames first, newest last — order matters on the PC.
+
+                // Drain historical frames first (exact coordinates from hardware queue)
                 val historyCount = event.historySize
                 for (h in 0 until historyCount) {
-                    val p = PenEvent.pool
+                    val hx = event.getHistoricalX(idx, h)
+                    val hy = event.getHistoricalY(idx, h)
+                    val p = PenEvent()
                     p.action = Const.ACTION_MOVE
                     p.contact = true
-                    fill(p, event, idx, event.getHistoricalX(idx, h), event.getHistoricalY(idx, h), h)
+                    fill(p, event, idx, hx, hy, h)
+                    addTrailPoint(hx, hy, p.pressure)
                     onSample(p)
                 }
-                val p = PenEvent.pool
+
+                // Current frame using precise pointer index
+                val px = event.getX(idx)
+                val py = event.getY(idx)
+                val p = PenEvent()
                 p.action = Const.ACTION_MOVE
                 p.contact = true
-                fill(p, event, idx, event.x, event.y)
+                fill(p, event, idx, px, py)
+                addTrailPoint(px, py, p.pressure)
                 onSample(p)
             }
-            MotionEvent.ACTION_POINTER_UP,
-            MotionEvent.ACTION_UP -> {
-                if (!penDown) return
+            MotionEvent.ACTION_POINTER_UP -> {
                 val idx = event.actionIndex
-                val p = PenEvent.pool
+                if (event.getPointerId(idx) == activePointerId) {
+                    val px = event.getX(idx)
+                    val py = event.getY(idx)
+                    val p = PenEvent()
+                    p.action = Const.ACTION_UP
+                    p.contact = false
+                    fill(p, event, idx, px, py)
+                    onSample(p)
+                    penDown = false
+                    activePointerId = -1
+                    if (contactSent) { onContactChanged(false); contactSent = false }
+                }
+            }
+            MotionEvent.ACTION_UP -> {
+                val idx = indexOfPointer(event, activePointerId).let { if (it >= 0) it else event.actionIndex.coerceAtLeast(0) }
+                val px = if (idx < event.pointerCount) event.getX(idx) else event.x
+                val py = if (idx < event.pointerCount) event.getY(idx) else event.y
+                val p = PenEvent()
                 p.action = Const.ACTION_UP
                 p.contact = false
-                fill(p, event, idx, event.x, event.y)
+                fill(p, event, idx, px, py)
                 onSample(p)
                 penDown = false
                 activePointerId = -1
                 if (contactSent) { onContactChanged(false); contactSent = false }
             }
             MotionEvent.ACTION_CANCEL -> {
-                if (!penDown) return
-                val p = PenEvent.pool
+                val idx = indexOfPointer(event, activePointerId).let { if (it >= 0) it else event.actionIndex.coerceAtLeast(0) }
+                val px = if (idx < event.pointerCount) event.getX(idx) else event.x
+                val py = if (idx < event.pointerCount) event.getY(idx) else event.y
+                val p = PenEvent()
                 p.action = Const.ACTION_UP
                 p.contact = false
-                fill(p, event, event.actionIndex, event.x, event.y)
+                fill(p, event, idx, px, py)
                 onSample(p)
                 penDown = false
                 activePointerId = -1
@@ -302,7 +442,7 @@ class PenSurfaceView(
     private fun toolAccepted(tool: Int): Boolean {
         return when (tool) {
             MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.TOOL_TYPE_ERASER -> true
-            else -> fingerEnabled && !(palmRejection && penDown)
+            else -> if (stylusOnly) false else (fingerEnabled && !(palmRejection && penDown))
         }
     }
 
@@ -320,10 +460,27 @@ class PenSurfaceView(
         historyPos: Int = -1,
     ) {
         p.relative = false
-        val w = if (width > 0) width else 1
-        val h = if (height > 0) height else 1
-        p.xNorm = ((rawX / w) * 65535f).toInt().coerceIn(0, 65535)
-        p.yNorm = ((rawY / h) * 65535f).toInt().coerceIn(0, 65535)
+        val w = if (width > 0) width.toFloat() else 1f
+        val h = if (height > 0) height.toFloat() else 1f
+
+        val normX = (rawX / w).coerceIn(0f, 1f)
+        val normY = (rawY / h).coerceIn(0f, 1f)
+
+        if (regionActive && (regionX0 > 0 || regionY0 > 0 || regionX1 < 65535 || regionY1 < 65535)) {
+            val rx0 = regionX0 / 65535f
+            val ry0 = regionY0 / 65535f
+            val rx1 = regionX1 / 65535f
+            val ry1 = regionY1 / 65535f
+            val rw = (rx1 - rx0).coerceAtLeast(0.01f)
+            val rh = (ry1 - ry0).coerceAtLeast(0.01f)
+            val mappedX = ((normX - rx0) / rw).coerceIn(0f, 1f)
+            val mappedY = ((normY - ry0) / rh).coerceIn(0f, 1f)
+            p.xNorm = (mappedX * 65535f).toInt().coerceIn(0, 65535)
+            p.yNorm = (mappedY * 65535f).toInt().coerceIn(0, 65535)
+        } else {
+            p.xNorm = (normX * 65535f).toInt().coerceIn(0, 65535)
+            p.yNorm = (normY * 65535f).toInt().coerceIn(0, 65535)
+        }
 
         val rawPressure = try {
             if (historyPos >= 0) e.getHistoricalAxisValue(MotionEvent.AXIS_PRESSURE, idx, historyPos)
@@ -333,12 +490,30 @@ class PenSurfaceView(
         }
         var computedPressure = (rawPressure.coerceIn(0f, 1f) * 65535f).toInt().coerceIn(0, 65535)
         if (p.contact && computedPressure <= 0) {
-            computedPressure = 32768 // Default to 50% pressure for fingers/capacitive styluses
+            computedPressure = 32768 // Default to 50% pressure for capacitive styluses / fingers
         }
         p.pressure = computedPressure
 
-        p.barrel = e.isButtonPressed(MotionEvent.BUTTON_STYLUS_PRIMARY)
-        p.eraser = e.getToolType(idx) == MotionEvent.TOOL_TYPE_ERASER
+        // Samsung S-Pen barrel button & hardware eraser detection
+        val isHardwareEraser = (idx < e.pointerCount && e.getToolType(idx) == MotionEvent.TOOL_TYPE_ERASER)
+        val isBarrelPressed = e.isButtonPressed(MotionEvent.BUTTON_STYLUS_PRIMARY) ||
+                              e.isButtonPressed(MotionEvent.BUTTON_SECONDARY) ||
+                              e.isButtonPressed(MotionEvent.BUTTON_TERTIARY)
+
+        when {
+            isHardwareEraser -> {
+                p.eraser = true
+            }
+            isBarrelPressed -> {
+                when (barrelAction) {
+                    BarrelAction.RIGHT_CLICK -> p.barrel = true
+                    BarrelAction.ERASER -> p.eraser = true
+                    BarrelAction.MIDDLE_CLICK -> p.middle = true
+                    BarrelAction.DOUBLE_CLICK -> p.doubleClick = true
+                    BarrelAction.UNDO -> p.undo = true
+                }
+            }
+        }
 
         if (tiltEnabled) readTilt(p, e, idx, historyPos) else {
             p.tiltPresent = false
@@ -348,9 +523,8 @@ class PenSurfaceView(
     }
 
     /**
-     * Android exposes a single AXIS_TILT (angle from vertical) plus
-     * AXIS_ORIENTATION. We decompose into tiltX/tiltY (centidegrees,
-     * -900..900) so the PC's POINTER_PEN_INFO gets sensible 2D values.
+     * Android exposes AXIS_TILT plus AXIS_ORIENTATION.
+     * Decomposes into tiltX/tiltY (centidegrees, -900..900).
      */
     private fun readTilt(p: PenEvent, e: MotionEvent, idx: Int, historyPos: Int) {
         val tilt = try {

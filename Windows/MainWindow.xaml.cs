@@ -44,9 +44,45 @@ namespace DashboardHost
         {
             PairingCodeText.Text = FormatPin(_deviceManager.CurrentPairingCode);
 
+            DisplayTargetCombo.Items.Clear();
             DisplayTargetCombo.Items.Add("Primary Screen");
             DisplayTargetCombo.Items.Add("Virtual Desktop");
-            DisplayTargetCombo.SelectedIndex = _settingsStore.Settings.MappingTarget == MappingTarget.VirtualScreen ? 1 : 0;
+            var screens = System.Windows.Forms.Screen.AllScreens;
+            for (int i = 0; i < screens.Length; i++)
+            {
+                DisplayTargetCombo.Items.Add($"Display {i + 1} ({screens[i].Bounds.Width}x{screens[i].Bounds.Height})");
+            }
+
+            if (_settingsStore.Settings.MappingTarget == MappingTarget.VirtualScreen)
+            {
+                DisplayTargetCombo.SelectedIndex = 1;
+            }
+            else if (_settingsStore.Settings.MappingTarget == MappingTarget.SpecificMonitor)
+            {
+                int targetIndex = 2 + _settingsStore.Settings.SelectedMonitorIndex;
+                DisplayTargetCombo.SelectedIndex = (targetIndex < DisplayTargetCombo.Items.Count) ? targetIndex : 0;
+            }
+            else
+            {
+                DisplayTargetCombo.SelectedIndex = 0;
+            }
+
+            _inputInjector.Target = _settingsStore.Settings.MappingTarget;
+            _inputInjector.SelectedMonitorIndex = _settingsStore.Settings.SelectedMonitorIndex;
+            _inputInjector.PreserveAspectRatio = _settingsStore.Settings.PreserveAspectRatio;
+            _inputInjector.ConfiguredBarrelAction = _settingsStore.Settings.BarrelAction;
+            _inputInjector.RawInputMode = _settingsStore.Settings.RawInputMode;
+
+            BarrelActionCombo.Items.Clear();
+            BarrelActionCombo.Items.Add("Right Click");
+            BarrelActionCombo.Items.Add("Middle Click");
+            BarrelActionCombo.Items.Add("Eraser");
+            BarrelActionCombo.Items.Add("Double Click");
+            BarrelActionCombo.Items.Add("Undo (Ctrl+Z)");
+            BarrelActionCombo.SelectedIndex = Math.Clamp((int)_settingsStore.Settings.BarrelAction, 0, 4);
+
+            AspectLockChk.IsChecked = _settingsStore.Settings.PreserveAspectRatio;
+            RawInputChk.IsChecked = _settingsStore.Settings.RawInputMode;
 
             StartWithWindowsChk.IsChecked = _settingsStore.Settings.StartWithWindows;
 
@@ -357,10 +393,56 @@ namespace DashboardHost
         private void DisplayTargetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_inputInjector == null || _settingsStore == null) return;
-            var target = DisplayTargetCombo.SelectedIndex == 1 ? MappingTarget.VirtualScreen : MappingTarget.PrimaryScreen;
-            _inputInjector.Target = target;
-            _settingsStore.Settings.MappingTarget = target;
+            if (DisplayTargetCombo.SelectedIndex == 1)
+            {
+                _inputInjector.Target = MappingTarget.VirtualScreen;
+                _settingsStore.Settings.MappingTarget = MappingTarget.VirtualScreen;
+            }
+            else if (DisplayTargetCombo.SelectedIndex >= 2)
+            {
+                _inputInjector.Target = MappingTarget.SpecificMonitor;
+                int monitorIdx = DisplayTargetCombo.SelectedIndex - 2;
+                _inputInjector.SelectedMonitorIndex = monitorIdx;
+                _settingsStore.Settings.MappingTarget = MappingTarget.SpecificMonitor;
+                _settingsStore.Settings.SelectedMonitorIndex = monitorIdx;
+            }
+            else
+            {
+                _inputInjector.Target = MappingTarget.PrimaryScreen;
+                _settingsStore.Settings.MappingTarget = MappingTarget.PrimaryScreen;
+            }
             _settingsStore.Save();
+        }
+
+        private void BarrelActionCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_inputInjector == null || _settingsStore == null) return;
+            if (BarrelActionCombo.SelectedIndex >= 0)
+            {
+                var action = (BarrelActionType)BarrelActionCombo.SelectedIndex;
+                _inputInjector.ConfiguredBarrelAction = action;
+                _settingsStore.Settings.BarrelAction = action;
+                _settingsStore.Save();
+            }
+        }
+
+        private void AspectLockChk_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_inputInjector == null || _settingsStore == null) return;
+            bool locked = AspectLockChk.IsChecked == true;
+            _inputInjector.PreserveAspectRatio = locked;
+            _settingsStore.Settings.PreserveAspectRatio = locked;
+            _settingsStore.Save();
+        }
+
+        private void RawInputChk_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_inputInjector == null || _settingsStore == null) return;
+            bool raw = RawInputChk.IsChecked == true;
+            _inputInjector.RawInputMode = raw;
+            _settingsStore.Settings.RawInputMode = raw;
+            _settingsStore.Save();
+            _server.Log(raw ? "Raw Input / OSU! Mode enabled (Direct digitizer stream)" : "Standard Pointer input active");
         }
 
         private void StartWithWindowsChk_Changed(object sender, RoutedEventArgs e)

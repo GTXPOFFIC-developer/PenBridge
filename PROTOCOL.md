@@ -1,4 +1,4 @@
-﻿# Dashboard Wire Protocol
+# Dashboard Wire Protocol
 
 Specification shared by the Android tablet app (client/device) and the
 Windows host app (server). Both apps implement this exact binary format.
@@ -107,7 +107,10 @@ u8   accepted          1 = accepted, 0 = denied
 
 ```
 u8   action            0 = UP  1 = DOWN  2 = MOVE  3 = HOVER
-u8   flags             bit0 contact, bit1 barrel, bit2 eraser, bit3 tilt present
+u8   flags             bit0 contact (0x01), bit1 barrel (0x02), bit2 eraser (0x04),
+                       bit3 tilt present (0x08), bit4 relative (0x10),
+                       bit5 middle click (0x20), bit6 double click (0x40),
+                       bit7 undo [Ctrl+Z] (0x80)
 i16  tiltX             tilt along X in centidegrees (-900..900)
 i16  tiltY             tilt along Y in centidegrees (-900..900)
 u16  pressure          0..65535 (scaled from stylus normalized pressure)

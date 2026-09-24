@@ -40,8 +40,8 @@
                 <StackPanel VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Dashboard Host" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
-                        <Border Background="#252A4A" CornerRadius="4" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="v1.2.0" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentViolet}"/>
+                        <Border Background="#16382C" BorderBrush="{StaticResource StatusGreen}" BorderThickness="1" CornerRadius="4" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="v1.3.0 PRO" FontSize="9" FontWeight="Bold" Foreground="{StaticResource StatusGreen}"/>
                         </Border>
                     </StackPanel>
                     <TextBlock Text="Android / iOS Tablet → Windows Pen Bridge" FontSize="11" Foreground="{StaticResource TextMuted}"/>
@@ -202,20 +202,32 @@
                 <!-- Stylus Telemetry Card -->
                 <Border Grid.Row="0" Background="{StaticResource CardGlassBrush}" BorderBrush="{StaticResource BorderDark}" BorderThickness="1" CornerRadius="10" Padding="16">
                     <StackPanel>
-                        <Grid Margin="0,0,0,12">
+                        <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="Stylus Telemetry" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
-                                <TextBlock Text="Live data from tablet — updates at pen sample rate" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Stylus Telemetry" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
+                                    <Border Background="#16382C" CornerRadius="4" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="NO ADS · PRO UNLOCKED" FontSize="9" FontWeight="Bold" Foreground="{StaticResource StatusGreen}"/>
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="Live digitizer coordinates, pressure dynamics and workspace mapping" FontSize="10" Foreground="{StaticResource TextMuted}"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="Target:" FontSize="10" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <ComboBox x:Name="DisplayTargetCombo" Width="130" FontSize="11" SelectionChanged="DisplayTargetCombo_SelectionChanged" Background="#12162B" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource BorderGlass}"/>
+                                <TextBlock Text="Target:" FontSize="10" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <ComboBox x:Name="DisplayTargetCombo" Width="135" FontSize="10" SelectionChanged="DisplayTargetCombo_SelectionChanged" Background="#12162B" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource BorderGlass}" Margin="0,0,8,0"/>
+                                <CheckBox x:Name="AspectLockChk" Content="1:1 Aspect" Foreground="{StaticResource TextMuted}" FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0" Checked="AspectLockChk_Changed" Unchecked="AspectLockChk_Changed" ToolTip="Preserve tablet aspect ratio without stretching"/>
+                                <CheckBox x:Name="RawInputChk" Content="⚡ OSU! Mode" Foreground="#EF4444" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" Checked="RawInputChk_Changed" Unchecked="RawInputChk_Changed" ToolTip="Raw unfiltered pointer stream with zero latency"/>
                             </StackPanel>
                         </Grid>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="S-Pen Barrel Button:" FontSize="10" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="BarrelActionCombo" Width="140" FontSize="10" SelectionChanged="BarrelActionCombo_SelectionChanged" Background="#12162B" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource BorderGlass}"/>
+                        </StackPanel>
 
                         <!-- Stat row -->
                         <Grid>

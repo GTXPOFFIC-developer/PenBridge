@@ -56,6 +56,9 @@ object Const {
     const val PEN_ERASER = 0x04
     const val PEN_TILT = 0x08
     const val PEN_RELATIVE = 0x10
+    const val PEN_MIDDLE = 0x20
+    const val PEN_DOUBLE_CLICK = 0x40
+    const val PEN_UNDO = 0x80
 
     val HEADER_SIZE = 10
 }
@@ -194,6 +197,9 @@ class PenEvent {
     var contact: Boolean = false
     var barrel: Boolean = false
     var eraser: Boolean = false
+    var middle: Boolean = false
+    var doubleClick: Boolean = false
+    var undo: Boolean = false
     var tiltPresent: Boolean = false
     var relative: Boolean = false
     var tiltX: Int = 0      // centidegrees -900..900
@@ -217,6 +223,9 @@ class PenEvent {
         if (eraser) f = f or Const.PEN_ERASER
         if (tiltPresent) f = f or Const.PEN_TILT
         if (relative) f = f or Const.PEN_RELATIVE
+        if (middle) f = f or Const.PEN_MIDDLE
+        if (doubleClick) f = f or Const.PEN_DOUBLE_CLICK
+        if (undo) f = f or Const.PEN_UNDO
         buf.put(f.toByte())
         buf.putShort(tiltX.toShort())
         buf.putShort(tiltY.toShort())

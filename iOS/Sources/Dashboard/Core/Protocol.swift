@@ -40,6 +40,10 @@ public enum ProtocolConst {
     public static let penBarrel: UInt8 = 0x02
     public static let penEraser: UInt8 = 0x04
     public static let penTilt: UInt8 = 0x08
+    public static let penRelative: UInt8 = 0x10
+    public static let penMiddle: UInt8 = 0x20
+    public static let penDoubleClick: UInt8 = 0x40
+    public static let penUndo: UInt8 = 0x80
 
     public static let headerSize = 10
 }
@@ -142,6 +146,10 @@ public struct PenEvent {
     public var contact: Bool = false
     public var barrel: Bool = false
     public var eraser: Bool = false
+    public var middle: Bool = false
+    public var doubleClick: Bool = false
+    public var undo: Bool = false
+    public var relative: Bool = false
     public var tiltPresent: Bool = false
     public var tiltX: Int16 = 0       // centidegrees -900..900
     public var tiltY: Int16 = 0
@@ -161,6 +169,10 @@ public struct PenEvent {
         if barrel { flags |= ProtocolConst.penBarrel }
         if eraser { flags |= ProtocolConst.penEraser }
         if tiltPresent { flags |= ProtocolConst.penTilt }
+        if relative { flags |= ProtocolConst.penRelative }
+        if middle { flags |= ProtocolConst.penMiddle }
+        if doubleClick { flags |= ProtocolConst.penDoubleClick }
+        if undo { flags |= ProtocolConst.penUndo }
         payload.append(flags)
 
         var tx = tiltX.littleEndian

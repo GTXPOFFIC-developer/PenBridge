@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.dashboard.DashboardApp
 import com.dashboard.core.ConnectMode
 import com.dashboard.core.CurvePoint
@@ -82,13 +83,72 @@ fun SettingsScreen(app: DashboardApp, onBack: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
 
+            // ---- Pro Features & Stylus Mode (VirtualTablet Pro Equivalent) ----
+            GlassCard {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("PRO UNLOCKED", style = MaterialTheme.typography.titleMedium, color = Color(0xFF10B981), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF10B981).copy(alpha = 0.15f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("No Ads · 100% Free & Open Source", color = Color(0xFF10B981), fontSize = 10.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    }
+                }
+                Text("All premium VirtualTablet Pro features unlocked out of the box", color = Ink.muted, style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.height(4.dp))
+                SwitchRow("Stylus Mode (S-Pen Only)", settingsState.stylusOnly) { commit(settingsState.copy(stylusOnly = it)) }
+                Text("100% rejects finger touches and palm contact when drawing", color = Ink.muted, style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.height(4.dp))
+                SwitchRow("Pen Trail", settingsState.penTrail) { commit(settingsState.copy(penTrail = it)) }
+                Text("Real-time visual ink trail under the stylus tip on tablet", color = Ink.muted, style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.height(4.dp))
+                SwitchRow("Raw Input / OSU! Mode", settingsState.rawInputMode) { commit(settingsState.copy(rawInputMode = it)) }
+                Text("Unfiltered 240Hz+ digitizer stream with zero lag for rhythm games", color = Ink.muted, style = MaterialTheme.typography.labelSmall)
+            }
+            Spacer(Modifier.height(14.dp))
+
+            // ---- Pen-Button Customization (Samsung S-Pen) ----------------------
+            GlassCard {
+                Text("Samsung S-Pen Button", style = MaterialTheme.typography.titleMedium)
+                Text("Remap the action triggered when clicking the S-Pen barrel button", color = Ink.muted, style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    Pill("Right Click", settingsState.barrelAction == com.dashboard.core.BarrelAction.RIGHT_CLICK) {
+                        commit(settingsState.copy(barrelAction = com.dashboard.core.BarrelAction.RIGHT_CLICK))
+                    }
+                    Pill("Eraser", settingsState.barrelAction == com.dashboard.core.BarrelAction.ERASER) {
+                        commit(settingsState.copy(barrelAction = com.dashboard.core.BarrelAction.ERASER))
+                    }
+                    Pill("Middle Click", settingsState.barrelAction == com.dashboard.core.BarrelAction.MIDDLE_CLICK) {
+                        commit(settingsState.copy(barrelAction = com.dashboard.core.BarrelAction.MIDDLE_CLICK))
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    Pill("Double Click", settingsState.barrelAction == com.dashboard.core.BarrelAction.DOUBLE_CLICK) {
+                        commit(settingsState.copy(barrelAction = com.dashboard.core.BarrelAction.DOUBLE_CLICK))
+                    }
+                    Pill("Undo (Ctrl+Z)", settingsState.barrelAction == com.dashboard.core.BarrelAction.UNDO) {
+                        commit(settingsState.copy(barrelAction = com.dashboard.core.BarrelAction.UNDO))
+                    }
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+
             // ---- Mapping area ------------------------------------------------
             GlassCard {
-                Text("Mapping area", style = MaterialTheme.typography.titleMedium)
-                Text("Which part of the tablet surface drives the cursor", color = Ink.muted, style = MaterialTheme.typography.labelMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Pill("Full surface", settingsState.mappingMode == MappingMode.FULL) { commit(settingsState.copy(mappingMode = MappingMode.FULL)) }
-                    Pill("Custom rect", settingsState.mappingMode == MappingMode.CUSTOM) { commit(settingsState.copy(mappingMode = MappingMode.CUSTOM)) }
+                Text("Drawing-Area Selection & Positioning", style = MaterialTheme.typography.titleMedium)
+                Text("Map a specific portion of the tablet screen to your PC monitor", color = Ink.muted, style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Pill("Full Tablet", settingsState.mappingMode == MappingMode.FULL) { commit(settingsState.copy(mappingMode = MappingMode.FULL)) }
+                    Pill("16:9 Screen", settingsState.mappingMode == MappingMode.CUSTOM && settingsState.regionX0 == 0 && settingsState.regionY0 == 7000) {
+                        commit(settingsState.copy(mappingMode = MappingMode.CUSTOM, regionX0 = 0, regionY0 = 7000, regionX1 = 65535, regionY1 = 58535))
+                    }
+                    Pill("Top Half", settingsState.mappingMode == MappingMode.CUSTOM && settingsState.regionY1 == 32768) {
+                        commit(settingsState.copy(mappingMode = MappingMode.CUSTOM, regionX0 = 0, regionY0 = 0, regionX1 = 65535, regionY1 = 32768))
+                    }
+                    Pill("Custom Crop", settingsState.mappingMode == MappingMode.CUSTOM) { commit(settingsState.copy(mappingMode = MappingMode.CUSTOM)) }
                 }
                 if (settingsState.mappingMode == MappingMode.CUSTOM) {
                     RectEditor(
@@ -137,7 +197,7 @@ fun SettingsScreen(app: DashboardApp, onBack: () -> Unit) {
 
             // ---- Input toggles ------------------------------------------------
             GlassCard {
-                Text("Input", style = MaterialTheme.typography.titleMedium)
+                Text("Input Options", style = MaterialTheme.typography.titleMedium)
                 SwitchRow("Finger as brush", settingsState.fingerInput) { commit(settingsState.copy(fingerInput = it)) }
                 SwitchRow("Palm rejection", settingsState.palmRejection) { commit(settingsState.copy(palmRejection = it)) }
                 SwitchRow("Tilt reports", settingsState.tiltEnabled) { commit(settingsState.copy(tiltEnabled = it)) }

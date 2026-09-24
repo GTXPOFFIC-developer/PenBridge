@@ -17,6 +17,10 @@ enum class MappingMode { FULL, CUSTOM }
 
 enum class InputMode { TRACKPAD, TABLET }
 
+enum class BarrelAction { RIGHT_CLICK, MIDDLE_CLICK, ERASER, DOUBLE_CLICK, UNDO }
+
+enum class AreaPreset { FULL, SCREEN_16_9, SCREEN_16_10, TOP_HALF, BOTTOM_HALF, CUSTOM }
+
 data class AppSettings(
     val mode: ConnectMode = ConnectMode.WIFI,
     val hostIp: String = "",
@@ -34,6 +38,12 @@ data class AppSettings(
     val aspectLock: Boolean = true,
     val rotationDeg: Int = 0,
     val curve: List<CurvePoint> = DEFAULT_CURVE,
+    val barrelAction: BarrelAction = BarrelAction.RIGHT_CLICK,
+    val penTrail: Boolean = true,
+    val hoverTrail: Boolean = false,
+    val stylusOnly: Boolean = false,
+    val rawInputMode: Boolean = false,
+    val drawingAreaPreset: AreaPreset = AreaPreset.FULL,
 ) {
     companion object {
         val DEFAULT_CURVE = listOf(
@@ -74,6 +84,12 @@ class SettingsStore(context: Context) {
             aspectLock = prefs.getBoolean(KEY_ASPECT, true),
             rotationDeg = prefs.getInt(KEY_ROTATION, 0),
             curve = curve,
+            barrelAction = try { BarrelAction.valueOf(prefs.getString(KEY_BARREL_ACTION, "RIGHT_CLICK") ?: "RIGHT_CLICK") } catch (_: Exception) { BarrelAction.RIGHT_CLICK },
+            penTrail = prefs.getBoolean(KEY_PEN_TRAIL, true),
+            hoverTrail = prefs.getBoolean(KEY_HOVER_TRAIL, false),
+            stylusOnly = prefs.getBoolean(KEY_STYLUS_ONLY, false),
+            rawInputMode = prefs.getBoolean(KEY_RAW_INPUT, false),
+            drawingAreaPreset = try { AreaPreset.valueOf(prefs.getString(KEY_AREA_PRESET, "FULL") ?: "FULL") } catch (_: Exception) { AreaPreset.FULL },
         )
     }
 
@@ -97,6 +113,12 @@ class SettingsStore(context: Context) {
         e.putBoolean(KEY_ASPECT, next.aspectLock)
         e.putInt(KEY_ROTATION, next.rotationDeg)
         e.putString(KEY_CURVE, encodeCurve(next.curve))
+        e.putString(KEY_BARREL_ACTION, next.barrelAction.name)
+        e.putBoolean(KEY_PEN_TRAIL, next.penTrail)
+        e.putBoolean(KEY_HOVER_TRAIL, next.hoverTrail)
+        e.putBoolean(KEY_STYLUS_ONLY, next.stylusOnly)
+        e.putBoolean(KEY_RAW_INPUT, next.rawInputMode)
+        e.putString(KEY_AREA_PRESET, next.drawingAreaPreset.name)
         e.apply()
         return next
     }
@@ -132,5 +154,11 @@ class SettingsStore(context: Context) {
         const val KEY_ASPECT = "aspect"
         const val KEY_ROTATION = "rotation"
         const val KEY_CURVE = "curve"
+        const val KEY_BARREL_ACTION = "barrel_action"
+        const val KEY_PEN_TRAIL = "pen_trail"
+        const val KEY_HOVER_TRAIL = "hover_trail"
+        const val KEY_STYLUS_ONLY = "stylus_only"
+        const val KEY_RAW_INPUT = "raw_input"
+        const val KEY_AREA_PRESET = "area_preset"
     }
 }

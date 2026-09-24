@@ -6,12 +6,16 @@ Turn any **Android tablet** (S-Pen / active stylus) or **iPad** (Apple Pencil) i
 
 ## Features
 
-- ⚡ **Ultra-Low Latency**: Binary UDP stream up to 240 Hz with sub-millisecond packet overhead.
-- 🖊️ **Full Stylus Dynamics**: High-precision pressure, tilt (X/Y), hovering, barrel buttons, and eraser.
+- ⚡ **Ultra-Low Latency & OSU! Mode**: Binary UDP stream up to 240 Hz with sub-millisecond overhead. Dedicated **⚡ OSU! Mode** removes hover throttling for rhythm gaming.
+- 🖊️ **Full Stylus Dynamics & S-Pen Customization**: Remap the S-Pen / active stylus barrel button to Right-Click, Middle-Click, Eraser, Double-Click, or Undo (`Ctrl+Z`).
+- ✨ **Real-Time Pen Trail**: Live glowing ink trail under the stylus nib with instant response.
+- 🖐️ **Stylus-Only Mode**: Active digitizer filtering with 100% rejection of palms, resting hands, and capacitive finger gestures.
+- 📐 **Drawing-Area Cropping & Multi-Monitor**: Choose tablet mapping presets (16:9, Top Half, Full) and lock to specific PC monitors with letterbox aspect ratio preservation.
 - 🔌 **Dual Connection Modes**:
   - **USB Mode**: Zero jitter, sub-millisecond latency via ADB reverse (Android) or USB tunnel (iOS).
   - **Wi-Fi Mode**: Zero-configuration auto-discovery via mDNS (`_dashboard._udp.local`).
 - 🔐 **Zero-Setup Pairing**: Google OAuth auto-pairing allows tablet and PC signed into the same Google account to link instantly without entering codes.
+- 💎 **100% Free, Ad-Free & Open-Source**: All features unlocked forever with zero paywalls and zero ads.
 - 🎨 **Creative App Ready**: Tested and compatible with Photoshop, Krita, Clip Studio Paint, Blender, Affinity, and OneNote.
 - 🌐 **True Cross-Platform**: Native client apps for Android & iOS; native host background services for Windows, Linux, and macOS.
 

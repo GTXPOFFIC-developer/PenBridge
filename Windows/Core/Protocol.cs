@@ -49,6 +49,9 @@ namespace DashboardHost.Core
         public const byte PenEraser = 0x04;
         public const byte PenTilt = 0x08;
         public const byte PenRelative = 0x10;
+        public const byte PenMiddle = 0x20;
+        public const byte PenDoubleClick = 0x40;
+        public const byte PenUndo = 0x80;
 
         public const int HeaderSize = 10;
     }
@@ -253,6 +256,9 @@ namespace DashboardHost.Core
         public bool Contact => (Flags & ProtocolConst.PenContact) != 0;
         public bool Barrel => (Flags & ProtocolConst.PenBarrel) != 0;
         public bool Eraser => (Flags & ProtocolConst.PenEraser) != 0;
+        public bool Middle => (Flags & ProtocolConst.PenMiddle) != 0;
+        public bool DoubleClick => (Flags & ProtocolConst.PenDoubleClick) != 0;
+        public bool Undo => (Flags & ProtocolConst.PenUndo) != 0;
         public bool TiltPresent => (Flags & ProtocolConst.PenTilt) != 0;
         public bool Relative => (Flags & ProtocolConst.PenRelative) != 0;
 
