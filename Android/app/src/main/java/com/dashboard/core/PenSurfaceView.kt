@@ -473,9 +473,28 @@ class PenSurfaceView(
                 }
             }
             MotionEvent.ACTION_MOVE -> {
-                if (!penDown) return
-                val idx = indexOfPointer(event, activePointerId)
-                if (idx < 0) return
+                val idx = indexOfPointer(event, activePointerId).let { if (it >= 0) it else event.actionIndex.coerceAtLeast(0) }
+                if (idx >= event.pointerCount) return
+                val tool = event.getToolType(idx)
+                if (!toolAccepted(tool)) return
+
+                if (!penDown) {
+                    penDown = true
+                    activePointerId = event.getPointerId(idx)
+                    hoverX = -1f
+                    hoverY = -1f
+                    if (!contactSent) { onContactChanged(true); contactSent = true }
+                    if (hapticsEnabled) onHaptic?.invoke()
+
+                    val pDown = PenEvent()
+                    pDown.action = Const.ACTION_DOWN
+                    pDown.contact = true
+                    val pxDown = event.getX(idx)
+                    val pyDown = event.getY(idx)
+                    fill(pDown, event, idx, pxDown, pyDown)
+                    addTrailPoint(pxDown, pyDown, pDown.pressure)
+                    onSample(pDown)
+                }
 
                 // Drain historical frames first (exact coordinates from hardware queue)
                 val historyCount = event.historySize

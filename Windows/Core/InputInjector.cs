@@ -214,18 +214,8 @@ namespace DashboardHost.Core
                 }
                 else
                 {
-                    // Probe if synthetic pen injection is permitted without uiAccess elevation
-                    var probe = new POINTER_TYPE_INFO[1];
-                    probe[0].type = POINTER_INPUT_TYPE.PT_PEN;
-                    probe[0].penInfo.pointerInfo.pointerType = POINTER_INPUT_TYPE.PT_PEN;
-                    probe[0].penInfo.pointerInfo.pointerId = 1;
-                    probe[0].penInfo.pointerInfo.pointerFlags = POINTER_FLAGS.POINTER_FLAG_UPDATE | POINTER_FLAGS.POINTER_FLAG_INRANGE;
-                    bool canInject = InjectSyntheticPointerInput(_syntheticPenDevice, probe, 1);
-                    if (!canInject)
-                    {
-                        Debug.WriteLine("Synthetic pen lacks UI access. Using Universal Direct Mouse Injection for 100% drawing compatibility.");
-                        _useSyntheticPen = false;
-                    }
+                    _useSyntheticPen = true;
+                    Debug.WriteLine("Windows Synthetic Pen Device initialized successfully.");
                 }
             }
             catch (Exception ex)
@@ -317,6 +307,13 @@ namespace DashboardHost.Core
             // Always update Windows system cursor position so all desktop apps (OpenBoard, Studio, Krita, Paint) receive continuous strokes
             SetCursorPos(x, y);
 
+            // If a hover packet arrives while contact is locked, DO NOT release the pen!
+            if (evt.Action == ProtocolConst.ActionHover && _syntheticPenInContact)
+            {
+                // Discard stray hover packets while drawing to protect the stroke from breaking
+                return;
+            }
+
             var pointerInfo = new POINTER_TYPE_INFO
             {
                 type = POINTER_INPUT_TYPE.PT_PEN
@@ -338,39 +335,38 @@ namespace DashboardHost.Core
 
             pen.penFlags = penFlags;
             pen.penMask = PEN_MASK.PEN_MASK_PRESSURE | PEN_MASK.PEN_MASK_TILT_X | PEN_MASK.PEN_MASK_TILT_Y;
-            pen.pressure = pressure;
+            pen.pressure = Math.Max(1u, pressure);
             pen.tiltX = tiltX;
             pen.tiltY = tiltY;
 
             switch (evt.Action)
             {
                 case ProtocolConst.ActionDown:
+                    // Single click triggers inbuilt Windows Pen and locks contact
                     flags |= POINTER_FLAGS.POINTER_FLAG_INRANGE | POINTER_FLAGS.POINTER_FLAG_INCONTACT |
-                             POINTER_FLAGS.POINTER_FLAG_DOWN | POINTER_FLAGS.POINTER_FLAG_FIRSTBUTTON;
+                             POINTER_FLAGS.POINTER_FLAG_DOWN;
                     _syntheticPenInContact = true;
                     break;
 
                 case ProtocolConst.ActionMove:
-                    flags |= POINTER_FLAGS.POINTER_FLAG_INRANGE | POINTER_FLAGS.POINTER_FLAG_UPDATE;
-                    if (evt.Contact)
+                    if (evt.Contact || _syntheticPenInContact)
                     {
-                        flags |= POINTER_FLAGS.POINTER_FLAG_INCONTACT | POINTER_FLAGS.POINTER_FLAG_FIRSTBUTTON;
+                        // Maintain locked contact while moving
+                        flags |= POINTER_FLAGS.POINTER_FLAG_INRANGE | POINTER_FLAGS.POINTER_FLAG_INCONTACT |
+                                 POINTER_FLAGS.POINTER_FLAG_UPDATE;
                         _syntheticPenInContact = true;
                     }
-                    else if (_syntheticPenInContact)
+                    else
                     {
-                        flags |= POINTER_FLAGS.POINTER_FLAG_UP;
-                        _syntheticPenInContact = false;
+                        // Hover movement
+                        flags |= POINTER_FLAGS.POINTER_FLAG_INRANGE | POINTER_FLAGS.POINTER_FLAG_UPDATE;
+                        pen.pressure = 0;
                     }
                     break;
 
                 case ProtocolConst.ActionHover:
                     flags |= POINTER_FLAGS.POINTER_FLAG_INRANGE | POINTER_FLAGS.POINTER_FLAG_UPDATE;
-                    if (_syntheticPenInContact)
-                    {
-                        flags |= POINTER_FLAGS.POINTER_FLAG_UP;
-                        _syntheticPenInContact = false;
-                    }
+                    pen.pressure = 0;
                     break;
 
                 case ProtocolConst.ActionUp:
@@ -379,10 +375,12 @@ namespace DashboardHost.Core
                     {
                         flags |= POINTER_FLAGS.POINTER_FLAG_UP | POINTER_FLAGS.POINTER_FLAG_INRANGE;
                         _syntheticPenInContact = false;
+                        pen.pressure = 0;
                     }
                     else
                     {
                         flags |= POINTER_FLAGS.POINTER_FLAG_UPDATE;
+                        pen.pressure = 0;
                     }
                     break;
             }
@@ -393,9 +391,7 @@ namespace DashboardHost.Core
             bool success = InjectSyntheticPointerInput(_syntheticPenDevice, _pointerArray, 1);
             if (!success)
             {
-                // Fall back to mouse injection permanently for this session if synthetic pen input lacks privileges
-                _useSyntheticPen = false;
-                Debug.WriteLine("InjectSyntheticPointerInput failed. Falling back to high-precision mouse injection.");
+                // Fall back to direct mouse injection for this packet without permanently disabling synthetic pen
                 InjectMouse(evt, x, y);
             }
         }
@@ -411,31 +407,46 @@ namespace DashboardHost.Core
                 return;
             }
 
+            // If a stray hover packet arrives while contact is locked, DO NOT release the pen!
+            if (evt.Action == ProtocolConst.ActionHover)
+            {
+                if (_mouseInContact)
+                {
+                    // Pen is locked in contact: maintain drag position
+                    SendAbsoluteMouse(0, x, y);
+                    return;
+                }
+                // Normal hover: simply update cursor position
+                SendAbsoluteMouse(0, x, y);
+                return;
+            }
+
             if (evt.Action == ProtocolConst.ActionDown || (evt.Contact && !_mouseInContact))
             {
+                // Single click triggers contact and locks it
+                SendAbsoluteMouse(0, x, y);
                 mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
                 _mouseInContact = true;
             }
-            else if (evt.Action == ProtocolConst.ActionMove && evt.Contact)
+            else if (evt.Action == ProtocolConst.ActionMove && (evt.Contact || _mouseInContact))
             {
                 if (!_mouseInContact)
                 {
+                    // First move with contact: lock contact down immediately
+                    SendAbsoluteMouse(0, x, y);
                     mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
                     _mouseInContact = true;
                 }
                 else
                 {
-                    // Drag movement while contact is maintained: generates smooth, continuous stroke
-                    mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, UIntPtr.Zero);
+                    // Drag movement while contact is locked: dispatch move with left button held
+                    SendAbsoluteMouse(0, x, y);
                 }
             }
             else if (evt.Action == ProtocolConst.ActionUp || (!evt.Contact && _mouseInContact))
             {
-                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
-                _mouseInContact = false;
-            }
-            else if (evt.Action == ProtocolConst.ActionHover && _mouseInContact)
-            {
+                // Explicit pen release when lifting stylus from screen
+                SendAbsoluteMouse(0, x, y);
                 mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
                 _mouseInContact = false;
             }
